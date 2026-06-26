@@ -25,6 +25,10 @@ const agents = [
 
 function NewInvestigation() {
   const navigate = useNavigate()
+  const handleLogout = () => {
+    localStorage.removeItem('token')
+    navigate('/login')
+  }
   const [form, setForm] = useState({ address: '', listingUrl: '', state: '', type: 'full' })
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value })
   const handleType = (id) => setForm({ ...form, type: id })
@@ -59,7 +63,7 @@ function NewInvestigation() {
             <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold">S</div>
             <span className="text-stone-700 text-sm font-medium">Shambhavi</span>
           </div>
-          <button className="text-stone-400 hover:text-red-500 transition-colors p-1"><LogOut className="w-4 h-4" /></button>
+          <button onClick={handleLogout} className="text-stone-400 hover:text-red-500 transition-colors p-1"><LogOut className="w-4 h-4" /></button>
         </div>
       </nav>
 

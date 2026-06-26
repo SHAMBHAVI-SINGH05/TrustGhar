@@ -11,6 +11,10 @@ const agents = [
 
 function LiveInvestigation() {
   const navigate = useNavigate()
+  const handleLogout = () => {
+    localStorage.removeItem('token')
+    navigate('/login')
+  }
   const [statuses, setStatuses] = useState(agents.map(() => 'pending'))
   const [logs, setLogs] = useState([])
   const logEndRef = useRef(null)
@@ -64,7 +68,7 @@ function LiveInvestigation() {
             <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold">S</div>
             <span className="text-stone-700 text-sm font-medium">Shambhavi</span>
           </div>
-          <button className="text-stone-400 hover:text-red-500 transition-colors p-1"><LogOut className="w-4 h-4" /></button>
+          <button onClick={handleLogout} className="text-stone-400 hover:text-red-500 transition-colors p-1"><LogOut className="w-4 h-4" /></button>
         </div>
       </nav>
 
