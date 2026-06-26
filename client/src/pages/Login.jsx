@@ -1,5 +1,8 @@
 import { useState } from 'react'
 import { Eye, EyeOff, ShieldCheck, FileSearch, GitBranch, BarChart3 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import api from '../api/axios'
+
 
 const features = [
   { icon: <ShieldCheck className="w-4 h-4 text-amber-400" />, title: 'AI Trust Score', desc: 'Every property rated by multi-agent AI' },
@@ -9,11 +12,47 @@ const features = [
 ]
 
 function Login() {
+  const navigate = useNavigate()
   const [showPassword, setShowPassword] = useState(false)
   const [activeTab, setActiveTab] = useState('login')
   const [form, setForm] = useState({ name: '', email: '', password: '' })
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value })
+
+  const getPasswordStrength = (password) => {
+    let score = 0
+    if (password.length >= 8) score++
+    if (/[0-9]/.test(password)) score++
+    if (/[^A-Za-z0-9]/.test(password)) score++
+
+    if (score <= 1) return { score, label: 'Weak', color: 'bg-red-400' }
+    if (score === 2) return { score, label: 'Medium', color: 'bg-amber-400' }
+    return { score, label: 'Strong', color: 'bg-emerald-500' }
+  }
+
+  const passwordStrength = getPasswordStrength(form.password)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      const endpoint = activeTab === 'login' ? '/auth/login' : '/auth/register'
+      const payload = activeTab === 'login'
+        ? { email: form.email, password: form.password }
+        : { name: form.name, email: form.email, password: form.password }
+
+      const res = await api.post(endpoint, payload)
+      localStorage.setItem('token', res.data.token)
+      navigate('/dashboard')
+    } catch (err) {
+      setError(err.response?.data?.message || 'Something went wrong. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <div className="min-h-screen flex">
@@ -98,72 +137,92 @@ function Login() {
             </button>
           </div>
 
-          {activeTab === 'login' ? (
-            <>
-              <div className="mb-4">
-                <label className="text-stone-700 text-sm font-medium mb-1.5 block">Email</label>
-                <input
-                  type="email" name="email" placeholder="Enter your email"
-                  value={form.email} onChange={handleChange}
-                  className="w-full bg-white border border-stone-200 rounded-lg px-4 py-3 text-stone-900 outline-none focus:border-amber-500 transition-colors text-sm"
-                />
-              </div>
-              <div className="mb-2">
-                <label className="text-stone-700 text-sm font-medium mb-1.5 block">Password</label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'} name="password" placeholder="Enter your password"
-                    value={form.password} onChange={handleChange}
-                    className="w-full bg-white border border-stone-200 rounded-lg px-4 py-3 pr-10 text-stone-900 outline-none focus:border-amber-500 transition-colors text-sm"
-                  />
-                  <button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-stone-400">
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-              <div className="text-right mb-6">
-                <span className="text-amber-500 text-sm cursor-pointer hover:underline">Forgot password?</span>
-              </div>
-              <button className="w-full bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-lg font-semibold transition-colors text-sm tracking-wide">
-                Login
-              </button>
-            </>
-          ) : (
-            <>
-              <div className="mb-4">
-                <label className="text-stone-700 text-sm font-medium mb-1.5 block">Full Name</label>
-                <input
-                  type="text" name="name" placeholder="Enter your name"
-                  value={form.name} onChange={handleChange}
-                  className="w-full bg-white border border-stone-200 rounded-lg px-4 py-3 text-stone-900 outline-none focus:border-amber-500 transition-colors text-sm"
-                />
-              </div>
-              <div className="mb-4">
-                <label className="text-stone-700 text-sm font-medium mb-1.5 block">Email</label>
-                <input
-                  type="email" name="email" placeholder="Enter your email"
-                  value={form.email} onChange={handleChange}
-                  className="w-full bg-white border border-stone-200 rounded-lg px-4 py-3 text-stone-900 outline-none focus:border-amber-500 transition-colors text-sm"
-                />
-              </div>
-              <div className="mb-6">
-                <label className="text-stone-700 text-sm font-medium mb-1.5 block">Password</label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'} name="password" placeholder="Create a password"
-                    value={form.password} onChange={handleChange}
-                    className="w-full bg-white border border-stone-200 rounded-lg px-4 py-3 pr-10 text-stone-900 outline-none focus:border-amber-500 transition-colors text-sm"
-                  />
-                  <button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-stone-400">
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-              <button className="w-full bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-lg font-semibold transition-colors text-sm tracking-wide">
-                Create Account
-              </button>
-            </>
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg px-4 py-2.5 mb-4">
+              {error}
+            </div>
           )}
+
+          <form onSubmit={handleSubmit}>
+            {activeTab === 'login' ? (
+              <>
+                <div className="mb-4">
+                  <label className="text-stone-700 text-sm font-medium mb-1.5 block">Email</label>
+                  <input
+                    type="email" name="email" placeholder="Enter your email"
+                    value={form.email} onChange={handleChange}
+                    className="w-full bg-white border border-stone-200 rounded-lg px-4 py-3 text-stone-900 outline-none focus:border-amber-500 transition-colors text-sm"
+                  />
+                </div>
+                <div className="mb-2">
+                  <label className="text-stone-700 text-sm font-medium mb-1.5 block">Password</label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'} name="password" placeholder="Enter your password"
+                      value={form.password} onChange={handleChange}
+                      className="w-full bg-white border border-stone-200 rounded-lg px-4 py-3 pr-10 text-stone-900 outline-none focus:border-amber-500 transition-colors text-sm"
+                    />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-stone-400">
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+                <div className="text-right mb-6">
+                  <span className="text-amber-500 text-sm cursor-pointer hover:underline">Forgot password?</span>
+                </div>
+                <button type="submit" disabled={loading} className="w-full bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-lg font-semibold transition-colors text-sm tracking-wide disabled:opacity-60">
+                  {loading ? 'Logging in...' : 'Login'}
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="mb-4">
+                  <label className="text-stone-700 text-sm font-medium mb-1.5 block">Full Name</label>
+                  <input
+                    type="text" name="name" placeholder="Enter your name"
+                    value={form.name} onChange={handleChange}
+                    className="w-full bg-white border border-stone-200 rounded-lg px-4 py-3 text-stone-900 outline-none focus:border-amber-500 transition-colors text-sm"
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="text-stone-700 text-sm font-medium mb-1.5 block">Email</label>
+                  <input
+                    type="email" name="email" placeholder="Enter your email"
+                    value={form.email} onChange={handleChange}
+                    className="w-full bg-white border border-stone-200 rounded-lg px-4 py-3 text-stone-900 outline-none focus:border-amber-500 transition-colors text-sm"
+                  />
+                </div>
+                <div className="mb-6">
+                  <label className="text-stone-700 text-sm font-medium mb-1.5 block">Password</label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'} name="password" placeholder="Create a password"
+                      value={form.password} onChange={handleChange}
+                      className="w-full bg-white border border-stone-200 rounded-lg px-4 py-3 pr-10 text-stone-900 outline-none focus:border-amber-500 transition-colors text-sm"
+                    />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-stone-400">
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  {form.password && (
+                    <div className="mt-2">
+                      <div className="flex gap-1.5 mb-1">
+                        {[0, 1, 2].map((i) => (
+                          <div key={i} className={`h-1 flex-1 rounded-full ${i < passwordStrength.score ? passwordStrength.color : 'bg-stone-200'}`} />
+                        ))}
+                      </div>
+                      <p className="text-xs text-stone-400">
+                        {passwordStrength.label} — use 8+ characters with a number and a symbol
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <button type="submit" disabled={loading} className="w-full bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-lg font-semibold transition-colors text-sm tracking-wide disabled:opacity-60">
+                  {loading ? 'Creating account...' : 'Create Account'}
+                </button>
+              </>
+            )}
+          </form>
 
           <p className="text-stone-500 text-center mt-6 text-sm">
             {activeTab === 'login' ? "Don't have an account? " : 'Already have an account? '}
