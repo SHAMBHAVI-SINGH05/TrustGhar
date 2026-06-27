@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ShieldCheck, Bell, LogOut, MapPin, Link, ChevronDown, Zap, FileSearch, Brain, BarChart3, ArrowRight, Search } from 'lucide-react'
+import api from '../api/axios'
 
 const indianStates = [
   'Andhra Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Delhi', 'Goa',
@@ -30,8 +31,27 @@ function NewInvestigation() {
     navigate('/login')
   }
   const [form, setForm] = useState({ address: '', listingUrl: '', state: '', type: 'full' })
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value })
   const handleType = (id) => setForm({ ...form, type: id })
+
+  const handleStart = async () => {
+    setError('')
+    setSubmitting(true)
+    try {
+      const res = await api.post('/investigations', {
+        propertyAddress: form.address,
+        listingUrl: form.listingUrl,
+        state: form.state,
+      })
+      navigate(`/investigate/live/${res.data.investigationId}`)
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not start investigation. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   return (
     <div className="min-h-screen" style={{ background: '#f5ede0' }}>
@@ -143,9 +163,15 @@ function NewInvestigation() {
               </div>
             </div>
 
-            <button onClick={() => navigate('/investigate/live')} className="w-full bg-indigo-500 hover:bg-indigo-600 text-white py-4 rounded-2xl font-bold text-base transition-all shadow-lg shadow-indigo-200 flex items-center justify-center gap-3">
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl px-4 py-2.5">
+                {error}
+              </div>
+            )}
+
+            <button onClick={handleStart} disabled={submitting} className="w-full bg-indigo-500 hover:bg-indigo-600 text-white py-4 rounded-2xl font-bold text-base transition-all shadow-lg shadow-indigo-200 flex items-center justify-center gap-3 disabled:opacity-60">
               <Brain className="w-5 h-5" />
-              Start AI Investigation
+              {submitting ? 'Starting...' : 'Start AI Investigation'}
               <ArrowRight className="w-5 h-5" />
             </button>
           </div>

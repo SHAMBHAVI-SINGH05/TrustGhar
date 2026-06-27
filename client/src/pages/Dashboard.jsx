@@ -1,13 +1,7 @@
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ShieldCheck, Search, Bell, LogOut, Eye, AlertTriangle, FileText, ChevronRight, Plus, FolderSearch, Upload, Radio, MapPin, CheckCircle, Clock, XCircle, ArrowUpRight, Activity } from 'lucide-react'
-
-const recentInvestigations = [
-  { id: 1, address: 'Prestige Towers, Whitefield', city: 'Bangalore', status: 'Completed', score: 87, date: '15 Jun' },
-  { id: 2, address: 'DLF Phase 3, Sector 24', city: 'Gurugram', status: 'Processing', score: null, date: '14 Jun' },
-  { id: 3, address: 'Lodha Palava City', city: 'Mumbai', status: 'Completed', score: 61, date: '13 Jun' },
-  { id: 4, address: 'Sobha City, Sector 108', city: 'Gurugram', status: 'Failed', score: null, date: '12 Jun' },
-  { id: 5, address: 'Brigade Horizon, KR Puram', city: 'Bangalore', status: 'Completed', score: 92, date: '11 Jun' },
-]
+import api from '../api/axios'
 
 const alerts = [
   { text: 'New complaint filed against Lodha builders', time: '2h ago', type: 'warning' },
@@ -17,10 +11,14 @@ const alerts = [
 ]
 
 const statusConfig = {
-  Completed: { icon: <CheckCircle className="w-3 h-3" />, cls: 'text-emerald-600 bg-emerald-50 border border-emerald-200' },
-  Processing: { icon: <Clock className="w-3 h-3" />, cls: 'text-indigo-600 bg-indigo-50 border border-indigo-200' },
-  Failed: { icon: <XCircle className="w-3 h-3" />, cls: 'text-red-500 bg-red-50 border border-red-200' },
+  complete: { label: 'Completed', icon: <CheckCircle className="w-3 h-3" />, cls: 'text-emerald-600 bg-emerald-50 border border-emerald-200' },
+  pending: { label: 'Pending', icon: <Clock className="w-3 h-3" />, cls: 'text-stone-500 bg-stone-100 border border-stone-200' },
+  running: { label: 'Running', icon: <Clock className="w-3 h-3" />, cls: 'text-indigo-600 bg-indigo-50 border border-indigo-200' },
+  failed: { label: 'Failed', icon: <XCircle className="w-3 h-3" />, cls: 'text-red-500 bg-red-50 border border-red-200' },
 }
+
+const formatDate = (dateStr) =>
+  new Date(dateStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 
 function ScoreBar({ score }) {
   const color = score >= 75 ? '#10b981' : score >= 50 ? '#6366f1' : '#ef4444'
@@ -36,10 +34,21 @@ function ScoreBar({ score }) {
 
 function Dashboard() {
   const navigate = useNavigate()
+  const [investigations, setInvestigations] = useState([])
+  const [loadingInvestigations, setLoadingInvestigations] = useState(true)
+
   const handleLogout = () => {
     localStorage.removeItem('token')
     navigate('/login')
   }
+
+  useEffect(() => {
+    api.get('/investigations')
+      .then((res) => setInvestigations(res.data))
+      .catch((err) => console.error('Failed to load investigations:', err))
+      .finally(() => setLoadingInvestigations(false))
+  }, [])
+
   return (
     <div className="min-h-screen" style={{ background: '#f5ede0' }}>
 
@@ -135,25 +144,30 @@ function Dashboard() {
             </div>
 
             <div className="divide-y divide-stone-50">
-              {recentInvestigations.map((item) => (
-                <div key={item.id} className="grid grid-cols-12 items-center px-6 py-3.5 hover:bg-indigo-50/30 transition-colors cursor-pointer group">
+              {loadingInvestigations && (
+                <p className="text-stone-400 text-sm px-6 py-6">Loading investigations...</p>
+              )}
+              {!loadingInvestigations && investigations.length === 0 && (
+                <p className="text-stone-400 text-sm px-6 py-6">No investigations yet — start your first one.</p>
+              )}
+              {investigations.map((item) => (
+                <div key={item._id} className="grid grid-cols-12 items-center px-6 py-3.5 hover:bg-indigo-50/30 transition-colors cursor-pointer group">
                   <div className="col-span-6 flex items-center gap-3">
                     <div className="bg-stone-100 group-hover:bg-indigo-100 transition-colors p-2 rounded-lg">
                       <MapPin className="w-3.5 h-3.5 text-stone-400 group-hover:text-indigo-500 transition-colors" />
                     </div>
                     <div>
-                      <p className="text-stone-800 text-sm font-semibold leading-tight">{item.address}</p>
-                      <p className="text-stone-400 text-xs">{item.city}</p>
+                      <p className="text-stone-800 text-sm font-semibold leading-tight">{item.propertyAddress}</p>
                     </div>
                   </div>
-                  <span className="col-span-2 text-stone-400 text-xs">{item.date}</span>
+                  <span className="col-span-2 text-stone-400 text-xs">{formatDate(item.createdAt)}</span>
                   <div className="col-span-2">
-                    {item.score ? <ScoreBar score={item.score} /> : <span className="text-stone-300 text-xs">—</span>}
+                    {item.status === 'complete' ? <ScoreBar score={item.trustScore} /> : <span className="text-stone-300 text-xs">—</span>}
                   </div>
                   <div className="col-span-2">
                     <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg ${statusConfig[item.status].cls}`}>
                       {statusConfig[item.status].icon}
-                      {item.status}
+                      {statusConfig[item.status].label}
                     </span>
                   </div>
                 </div>
