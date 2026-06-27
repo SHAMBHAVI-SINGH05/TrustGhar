@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { ShieldCheck, Bell, LogOut, Search, Brain, FileSearch, BarChart3, CheckCircle, Loader2, Clock, ArrowRight } from 'lucide-react'
 
 const agents = [
@@ -11,6 +11,7 @@ const agents = [
 
 function LiveInvestigation() {
   const navigate = useNavigate()
+  const { id } = useParams()
   const handleLogout = () => {
     localStorage.removeItem('token')
     navigate('/login')
@@ -144,7 +145,7 @@ function LiveInvestigation() {
 
         <button
           disabled={!allDone}
-          onClick={() => navigate('/report')}
+          onClick={() => navigate(`/report/${id}`)}
           className={`w-full mt-6 py-4 rounded-2xl font-bold text-base transition-all flex items-center justify-center gap-3
             ${allDone
               ? 'bg-indigo-500 hover:bg-indigo-600 text-white shadow-lg shadow-indigo-200'
