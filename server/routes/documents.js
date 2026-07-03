@@ -35,4 +35,13 @@ router.post('/analyze', auth, upload.single('file'), async (req, res) => {
   }
 });
 
+router.get('/', auth, async (req, res) => {
+  try {
+    const documents = await Document.find({ userId: req.userId }).sort({ createdAt: -1 });
+    res.json(documents);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
 module.exports = router;
