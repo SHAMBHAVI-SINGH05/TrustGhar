@@ -1,43 +1,104 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ShieldCheck, Bell, LogOut, Search, Brain, FileSearch, BarChart3, CheckCircle, Loader2, Clock, ArrowRight } from 'lucide-react'
+import api from '../api/axios'
 
-const agents = [
-  { icon: Search, name: 'RERA Scraper Agent', log: 'RERA data fetched — registration verified for Whitefield, Bangalore' },
-  { icon: Brain, name: 'Fraud Detector Agent', log: 'Knowledge graph built — 2 builder connections flagged for review' },
-  { icon: FileSearch, name: 'Document Analyzer Agent', log: 'Sale deed scanned — no red flag clauses detected' },
-  { icon: BarChart3, name: 'Report Generator Agent', log: 'Trust score computed — final report ready' },
+const agentDefs = [
+  { icon: Search, name: 'RERA Scraper Agent', log: 'Querying RERA portal for builder registration and compliance history...' },
+  { icon: Brain, name: 'Fraud Detector Agent', log: 'Building fraud knowledge graph — checking director and shell company links...' },
+  { icon: FileSearch, name: 'Document Analyzer Agent', log: 'Scanning property documents for risk clauses and legal red flags...' },
+  { icon: BarChart3, name: 'Report Generator Agent', log: 'Computing trust score and compiling final investigation report...' },
 ]
 
 function LiveInvestigation() {
   const navigate = useNavigate()
   const { id } = useParams()
+  const [investigation, setInvestigation] = useState(null)
+  const [statuses, setStatuses] = useState(['pending', 'pending', 'pending', 'pending'])
+  const [logs, setLogs] = useState([])
+  const logEndRef = useRef(null)
+  const agentTimerRef = useRef(null)
+  const animationStartedRef = useRef(false)
+
   const handleLogout = () => {
     localStorage.removeItem('token')
     navigate('/login')
   }
-  const [statuses, setStatuses] = useState(agents.map(() => 'pending'))
-  const [logs, setLogs] = useState([])
-  const logEndRef = useRef(null)
+
+  const startAgentAnimation = () => {
+    setStatuses(['running', 'pending', 'pending', 'pending'])
+    setLogs([agentDefs[0].log])
+    let current = 0
+
+    agentTimerRef.current = setInterval(() => {
+      current++
+      if (current >= agentDefs.length) {
+        clearInterval(agentTimerRef.current)
+        return
+      }
+      setStatuses(prev => prev.map((_, i) => {
+        if (i < current) return 'done'
+        if (i === current) return 'running'
+        return 'pending'
+      }))
+      setLogs(prev => [...prev, agentDefs[current].log])
+    }, 55000)
+  }
+
+  const showCompleteState = (inv) => {
+    clearInterval(agentTimerRef.current)
+    setStatuses(['done', 'done', 'done', 'done'])
+    setInvestigation(inv)
+    const realLogs = []
+    if (inv.agentOutputs?.rera_status) realLogs.push(`RERA: ${inv.agentOutputs.rera_status.substring(0, 160)}`)
+    if (inv.agentOutputs?.fraud_status) realLogs.push(`Fraud: ${inv.agentOutputs.fraud_status.substring(0, 160)}`)
+    if (inv.agentOutputs?.document_status) realLogs.push(`Documents: ${inv.agentOutputs.document_status.substring(0, 160)}`)
+    if (inv.report) realLogs.push(`Final verdict: ${inv.report.substring(0, 160)}`)
+    setLogs(realLogs)
+  }
 
   useEffect(() => {
-    agents.forEach((agent, i) => {
-      setTimeout(() => {
-        setStatuses(prev => prev.map((s, idx) => (idx === i ? 'running' : s)))
-      }, i * 2500)
+    let pollInterval = null
 
-      setTimeout(() => {
-        setStatuses(prev => prev.map((s, idx) => (idx === i ? 'done' : s)))
-        setLogs(prev => [...prev, agent.log])
-      }, i * 2500 + 2000)
-    })
-  }, [])
+    const checkStatus = async () => {
+      try {
+        const { data } = await api.get(`/investigations/${id}`)
+
+        if (data.status === 'running' && !animationStartedRef.current) {
+          animationStartedRef.current = true
+          startAgentAnimation()
+        }
+
+        if (data.status === 'complete') {
+          clearInterval(pollInterval)
+          showCompleteState(data)
+        }
+
+        if (data.status === 'failed') {
+          clearInterval(pollInterval)
+          clearInterval(agentTimerRef.current)
+          setStatuses(['pending', 'pending', 'pending', 'pending'])
+          setLogs(['Investigation failed. Please try again from the dashboard.'])
+        }
+      } catch (err) {
+        console.error('Poll error:', err)
+      }
+    }
+
+    checkStatus()
+    pollInterval = setInterval(checkStatus, 3000)
+
+    return () => {
+      clearInterval(pollInterval)
+      clearInterval(agentTimerRef.current)
+    }
+  }, [id])
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [logs])
 
-  const allDone = statuses.every(s => s === 'done')
+  const allDone = statuses.every(s => s === 'done') && investigation?.status === 'complete'
 
   return (
     <div className="min-h-screen" style={{ background: '#f5ede0' }}>
@@ -69,23 +130,27 @@ function LiveInvestigation() {
             <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold">S</div>
             <span className="text-stone-700 text-sm font-medium">Shambhavi</span>
           </div>
-          <button onClick={handleLogout} className="text-stone-400 hover:text-red-500 transition-colors p-1"><LogOut className="w-4 h-4" /></button>
+          <button onClick={handleLogout} className="text-stone-400 hover:text-red-500 transition-colors p-1">
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </nav>
 
       <div className="max-w-5xl mx-auto px-8 py-10">
         <div className="mb-8">
           <h1 className="text-stone-900 text-2xl font-extrabold tracking-tight">Investigation in Progress</h1>
-          <p className="text-stone-400 text-sm mt-1">Prestige Towers, Whitefield, Bangalore</p>
+          <p className="text-stone-400 text-sm mt-1">
+            {investigation?.propertyAddress || 'Starting investigation...'}
+          </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-6 items-start">
+        <div className="grid grid-cols-2 gap-6 items-stretch">
 
           {/* Agent timeline */}
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-stone-100">
             <h2 className="text-stone-900 font-bold text-sm mb-5">Agent Pipeline</h2>
             <div className="flex flex-col gap-4">
-              {agents.map((agent, i) => {
+              {agentDefs.map((agent, i) => {
                 const Icon = agent.icon
                 const status = statuses[i]
                 return (
@@ -96,7 +161,7 @@ function LiveInvestigation() {
                         <Icon className={`w-4 h-4
                           ${status === 'done' ? 'text-emerald-500' : status === 'running' ? 'text-indigo-500' : 'text-stone-300'}`} />
                       </div>
-                      {i < agents.length - 1 && <div className="w-px h-8 bg-stone-200 mt-1" />}
+                      {i < agentDefs.length - 1 && <div className="w-px h-8 bg-stone-200 mt-1" />}
                     </div>
                     <div className="flex-1 pt-1">
                       <div className="flex items-center justify-between">
@@ -127,11 +192,11 @@ function LiveInvestigation() {
           </div>
 
           {/* Live console log */}
-          <div className="rounded-2xl p-6 shadow-sm" style={{ background: '#1c1c24' }}>
+          <div className="rounded-2xl p-6 shadow-sm flex flex-col" style={{ background: '#1c1c24' }}>
             <h2 className="text-white font-bold text-sm mb-4">Live Log</h2>
-            <div className="flex flex-col gap-2 h-64 overflow-y-auto font-mono">
+            <div className="flex flex-col gap-2 flex-1 overflow-y-auto font-mono">
               {logs.length === 0 && (
-                <p className="text-stone-500 text-xs">Waiting for first agent to start...</p>
+                <p className="text-stone-500 text-xs">Waiting for agents to start...</p>
               )}
               {logs.map((line, i) => (
                 <p key={i} className="text-emerald-400 text-xs leading-relaxed">
