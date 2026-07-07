@@ -7,3 +7,4 @@ venv/
 dist/
 .DS_Store
 ai-service/chroma_db/
+server/uploads/

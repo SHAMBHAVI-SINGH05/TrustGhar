@@ -1,7 +1,9 @@
 import asyncio
-from fastapi import FastAPI
+import os
+from fastapi import FastAPI, UploadFile, File
 from pydantic import BaseModel
-from graph import investigation_graph
+from graph import investigation_graph, groq_llm
+from document_analyzer import analyze_document
 
 app = FastAPI()
 
@@ -31,4 +33,11 @@ async def investigate(request: InvestigationRequest):
             "document_score": 0,
         }
     )
+    return result
+
+
+@app.post("/analyze-document")
+async def analyze_document_endpoint(file: UploadFile = File(...)):
+    file_bytes = await file.read()
+    result = await asyncio.to_thread(analyze_document, file_bytes, groq_llm)
     return result
