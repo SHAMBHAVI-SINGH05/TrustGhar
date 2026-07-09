@@ -14,7 +14,11 @@ router.get('/', auth, async (req, res) => {
 
     const monitoredCount = await Investigation.countDocuments({ userId: req.userId, isMonitored: true });
 
-    res.json({ recentInvestigations, unreadAlerts, monitoredCount });
+    const totalInvestigations = await Investigation.countDocuments({ userId: req.userId });
+
+    const completedReports = await Investigation.countDocuments({ userId: req.userId, status: 'complete' });
+
+    res.json({ recentInvestigations, unreadAlerts, monitoredCount, totalInvestigations, completedReports });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }

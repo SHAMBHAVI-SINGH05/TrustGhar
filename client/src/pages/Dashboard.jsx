@@ -3,12 +3,20 @@ import { useNavigate } from 'react-router-dom'
 import { ShieldCheck, Search, Bell, LogOut, Eye, AlertTriangle, FileText, ChevronRight, Plus, FolderSearch, Upload, Radio, MapPin, CheckCircle, Clock, XCircle, ArrowUpRight, Activity } from 'lucide-react'
 import api from '../api/axios'
 
-const alerts = [
-  { text: 'New complaint filed against Lodha builders', time: '2h ago', type: 'warning' },
-  { text: 'RERA registration expired for Prestige Towers', time: '5h ago', type: 'error' },
-  { text: 'Trust score updated: DLF Phase 3', time: '1d ago', type: 'info' },
-  { text: 'Builder CIN mismatch detected', time: '2d ago', type: 'warning' },
-]
+const severityStyle = {
+  critical: 'bg-red-50 border-red-200 text-red-600',
+  warning: 'bg-orange-50 border-orange-200 text-orange-700',
+  info: 'bg-stone-50 border-stone-200 text-stone-500',
+}
+
+function timeAgo(dateStr) {
+  const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.floor(hours / 24)}d ago`
+}
 
 const statusConfig = {
   complete: { label: 'Completed', icon: <CheckCircle className="w-3 h-3" />, cls: 'text-emerald-600 bg-emerald-50 border border-emerald-200' },
@@ -36,6 +44,9 @@ function Dashboard() {
   const navigate = useNavigate()
   const [investigations, setInvestigations] = useState([])
   const [loadingInvestigations, setLoadingInvestigations] = useState(true)
+  const [stats, setStats] = useState({ totalInvestigations: 0, monitoredCount: 0, unreadAlerts: 0, completedReports: 0 })
+  const [liveAlerts, setLiveAlerts] = useState([])
+  const [userName, setUserName] = useState('')
 
   const handleLogout = () => {
     localStorage.removeItem('token')
@@ -47,6 +58,18 @@ function Dashboard() {
       .then((res) => setInvestigations(res.data))
       .catch((err) => console.error('Failed to load investigations:', err))
       .finally(() => setLoadingInvestigations(false))
+
+    api.get('/dashboard')
+      .then((res) => setStats(res.data))
+      .catch((err) => console.error('Failed to load dashboard stats:', err))
+
+    api.get('/alerts')
+      .then((res) => setLiveAlerts(res.data.slice(0, 4)))
+      .catch((err) => console.error('Failed to load alerts:', err))
+
+    api.get('/auth/me')
+      .then((res) => setUserName(res.data.name))
+      .catch((err) => console.error('Failed to load user:', err))
   }, [])
 
   return (
@@ -76,8 +99,8 @@ function Dashboard() {
             <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-400 rounded-full" />
           </button>
           <div className="flex items-center gap-2 bg-stone-100 rounded-full px-3 py-1.5">
-            <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold">S</div>
-            <span className="text-stone-700 text-sm font-medium">Shambhavi</span>
+            <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold">{userName ? userName[0].toUpperCase() : ''}</div>
+            <span className="text-stone-700 text-sm font-medium">{userName}</span>
           </div>
           <button onClick={handleLogout} className="text-stone-400 hover:text-red-500 transition-colors p-1"><LogOut className="w-4 h-4" /></button>
         </div>
@@ -88,7 +111,7 @@ function Dashboard() {
         {/* Welcome row */}
         <div className="flex items-end justify-between mb-8">
           <div>
-            <h1 className="text-stone-900 text-3xl font-extrabold tracking-tight mb-1">Welcome back, Shambhavi</h1>
+            <h1 className="text-stone-900 text-3xl font-extrabold tracking-tight mb-1">Welcome back{userName ? `, ${userName}` : ''}</h1>
             <p className="text-stone-400 text-sm">Your property intelligence overview for today</p>
           </div>
           <button onClick={() => navigate('/investigate/new')} className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-lg shadow-indigo-200">
@@ -100,20 +123,17 @@ function Dashboard() {
         {/* Stats row */}
         <div className="grid grid-cols-4 gap-4 mb-6">
           {[
-            { label: 'Investigations', value: '12', sub: '+2 this month', icon: <FolderSearch className="w-5 h-5 text-indigo-500" />, up: true },
-            { label: 'Monitored', value: '4', sub: 'Active watch', icon: <Eye className="w-5 h-5 text-indigo-500" />, up: true },
-            { label: 'Unread Alerts', value: '3', sub: 'Needs attention', icon: <AlertTriangle className="w-5 h-5 text-red-400" />, up: false },
-            { label: 'Reports', value: '9', sub: 'Last 30 days', icon: <FileText className="w-5 h-5 text-indigo-500" />, up: true },
+            { label: 'Investigations', value: stats.totalInvestigations, sub: 'All time', icon: <FolderSearch className="w-5 h-5 text-indigo-500" /> },
+            { label: 'Monitored', value: stats.monitoredCount, sub: 'Currently watched', icon: <Eye className="w-5 h-5 text-indigo-500" /> },
+            { label: 'Unread Alerts', value: stats.unreadAlerts, sub: 'Needs attention', icon: <AlertTriangle className="w-5 h-5 text-red-400" /> },
+            { label: 'Reports', value: stats.completedReports, sub: 'Completed', icon: <FileText className="w-5 h-5 text-indigo-500" /> },
           ].map((s, i) => (
             <div key={i} className="bg-white rounded-2xl p-5 shadow-sm border border-stone-100 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between mb-3">
                 <div className="bg-indigo-50 p-2 rounded-xl">
                   {s.icon}
                 </div>
-                <span className={`flex items-center gap-1 text-xs font-semibold ${s.up ? 'text-emerald-500' : 'text-red-400'}`}>
-                  <ArrowUpRight className={`w-3 h-3 ${!s.up ? 'rotate-90' : ''}`} />
-                  {s.sub}
-                </span>
+                <span className="text-stone-400 text-xs font-semibold">{s.sub}</span>
               </div>
               <p className="text-stone-900 text-4xl font-extrabold tracking-tight">{s.value}</p>
               <p className="text-stone-400 text-sm mt-1">{s.label}</p>
@@ -179,16 +199,18 @@ function Dashboard() {
           <div className="bg-white rounded-2xl p-5 flex flex-col shadow-sm border border-stone-100">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-stone-900 font-bold text-sm">Live Alerts</h2>
-              <span className="bg-red-50 text-red-500 text-xs font-bold px-2 py-0.5 rounded-md border border-red-100">3 new</span>
+              {stats.unreadAlerts > 0 && (
+                <span className="bg-red-50 text-red-500 text-xs font-bold px-2 py-0.5 rounded-md border border-red-100">{stats.unreadAlerts} new</span>
+              )}
             </div>
             <div className="flex flex-col gap-2.5 flex-1 justify-between">
-              {alerts.map((a, i) => (
-                <div key={i} className={`p-3 rounded-xl border text-xs
-                  ${a.type === 'warning' ? 'bg-orange-50 border-orange-200 text-orange-700'
-                    : a.type === 'error' ? 'bg-red-50 border-red-200 text-red-600'
-                    : 'bg-stone-50 border-stone-200 text-stone-500'}`}>
-                  <p className="font-medium leading-snug mb-1">{a.text}</p>
-                  <p className="opacity-60">{a.time}</p>
+              {liveAlerts.length === 0 && (
+                <p className="text-stone-400 text-sm py-6 text-center">No alerts yet.</p>
+              )}
+              {liveAlerts.map((a) => (
+                <div key={a._id} className={`p-3 rounded-xl border text-xs ${severityStyle[a.severity] || severityStyle.info}`}>
+                  <p className="font-medium leading-snug mb-1">{a.message}</p>
+                  <p className="opacity-60">{timeAgo(a.createdAt)}</p>
                 </div>
               ))}
             </div>
