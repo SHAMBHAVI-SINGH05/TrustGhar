@@ -1,8 +1,10 @@
 const express = require('express');
+const { Readable } = require('stream');
 const router = express.Router();
 const Investigation = require('../models/Investigation');
 const Job = require('../models/Job');
 const auth = require('../middleware/auth');
+const { getIO } = require('../socket');
 
 function computeTrustScore(result) {
   let score = 70;
@@ -18,6 +20,9 @@ function computeTrustScore(result) {
 }
 
 async function runInvestigation(address, investigationId) {
+  const io = getIO();
+  const roomId = investigationId.toString();
+
   try {
     await Investigation.findByIdAndUpdate(investigationId, { status: 'running' });
 
@@ -30,31 +35,53 @@ async function runInvestigation(address, investigationId) {
 
     if (!response.ok) throw new Error(`AI service responded with ${response.status}`);
 
-    const result = await response.json();
-    const trustScore = result.trust_score || computeTrustScore(result);
+    // The AI service streams one JSON line per finished agent. We merge
+    // each one into `accumulated` as it arrives, and broadcast it live.
+    const accumulated = {};
+    let buffer = '';
 
-    await Investigation.findByIdAndUpdate(investigationId, {
+    for await (const chunk of Readable.fromWeb(response.body)) {
+      buffer += chunk.toString();
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const update = JSON.parse(line);
+        const nodeName = Object.keys(update)[0];
+        const nodeOutput = update[nodeName];
+        Object.assign(accumulated, nodeOutput);
+        io.to(roomId).emit('agent-update', { node: nodeName, output: nodeOutput });
+      }
+    }
+
+    const trustScore = accumulated.trust_score || computeTrustScore(accumulated);
+
+    const updated = await Investigation.findByIdAndUpdate(investigationId, {
       status: 'complete',
       trustScore,
       agentOutputs: {
-        rera_status: result.rera_status,
-        fraud_status: result.fraud_status,
-        document_status: result.document_status,
-        rera_score: result.rera_score,
-        fraud_score: result.fraud_score,
-        document_score: result.document_score,
+        rera_status: accumulated.rera_status,
+        fraud_status: accumulated.fraud_status,
+        document_status: accumulated.document_status,
+        rera_score: accumulated.rera_score,
+        fraud_score: accumulated.fraud_score,
+        document_score: accumulated.document_score,
       },
-      report: result.final_report,
-    });
+      report: accumulated.final_report,
+    }, { new: true });
 
     await Job.findOneAndUpdate(
       { investigationId },
       { status: 'done', completedAt: new Date() }
     );
+
+    io.to(roomId).emit('investigation-complete', updated);
   } catch (err) {
     console.error('Investigation failed:', err.message);
     await Investigation.findByIdAndUpdate(investigationId, { status: 'failed' });
     await Job.findOneAndUpdate({ investigationId }, { status: 'failed' });
+    io.to(roomId).emit('investigation-failed', { message: err.message });
   }
 }
 

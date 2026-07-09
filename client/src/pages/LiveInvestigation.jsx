@@ -1,14 +1,30 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { io } from 'socket.io-client'
 import { ShieldCheck, Bell, LogOut, Search, Brain, FileSearch, BarChart3, CheckCircle, Loader2, Clock, ArrowRight } from 'lucide-react'
 import api from '../api/axios'
 
 const agentDefs = [
-  { icon: Search, name: 'RERA Scraper Agent', log: 'Querying RERA portal for builder registration and compliance history...' },
-  { icon: Brain, name: 'Fraud Detector Agent', log: 'Building fraud knowledge graph — checking director and shell company links...' },
-  { icon: FileSearch, name: 'Document Analyzer Agent', log: 'Scanning property documents for risk clauses and legal red flags...' },
-  { icon: BarChart3, name: 'Report Generator Agent', log: 'Computing trust score and compiling final investigation report...' },
+  { icon: Search, name: 'RERA Scraper Agent' },
+  { icon: Brain, name: 'Fraud Detector Agent' },
+  { icon: FileSearch, name: 'Document Analyzer Agent' },
+  { icon: BarChart3, name: 'Report Generator Agent' },
 ]
+
+const nodeToIndex = {
+  rera_check: 0,
+  fraud_check: 1,
+  document_check: 2,
+  generate_report: 3,
+}
+
+function extractText(node, output) {
+  if (node === 'rera_check') return output.rera_status
+  if (node === 'fraud_check') return output.fraud_status
+  if (node === 'document_check') return output.document_status
+  if (node === 'generate_report') return output.final_report
+  return ''
+}
 
 function LiveInvestigation() {
   const navigate = useNavigate()
@@ -17,36 +33,14 @@ function LiveInvestigation() {
   const [statuses, setStatuses] = useState(['pending', 'pending', 'pending', 'pending'])
   const [logs, setLogs] = useState([])
   const logEndRef = useRef(null)
-  const agentTimerRef = useRef(null)
-  const animationStartedRef = useRef(false)
+  const socketRef = useRef(null)
 
   const handleLogout = () => {
     localStorage.removeItem('token')
     navigate('/login')
   }
 
-  const startAgentAnimation = () => {
-    setStatuses(['running', 'pending', 'pending', 'pending'])
-    setLogs([agentDefs[0].log])
-    let current = 0
-
-    agentTimerRef.current = setInterval(() => {
-      current++
-      if (current >= agentDefs.length) {
-        clearInterval(agentTimerRef.current)
-        return
-      }
-      setStatuses(prev => prev.map((_, i) => {
-        if (i < current) return 'done'
-        if (i === current) return 'running'
-        return 'pending'
-      }))
-      setLogs(prev => [...prev, agentDefs[current].log])
-    }, 55000)
-  }
-
   const showCompleteState = (inv) => {
-    clearInterval(agentTimerRef.current)
     setStatuses(['done', 'done', 'done', 'done'])
     setInvestigation(inv)
     const realLogs = []
@@ -57,6 +51,38 @@ function LiveInvestigation() {
     setLogs(realLogs)
   }
 
+  // Real-time updates: listen for each agent actually finishing.
+  useEffect(() => {
+    const socket = io('http://localhost:5000')
+    socketRef.current = socket
+
+    socket.emit('join-investigation', id)
+
+    socket.on('agent-update', ({ node, output }) => {
+      const index = nodeToIndex[node]
+      if (index === undefined) return
+      const text = extractText(node, output)
+      setStatuses(prev => prev.map((s, i) => {
+        if (i <= index) return 'done'
+        if (i === index + 1) return 'running'
+        return s
+      }))
+      setLogs(prev => [...prev, `${agentDefs[index].name}: ${(text || '').substring(0, 160)}`])
+    })
+
+    socket.on('investigation-complete', (inv) => {
+      showCompleteState(inv)
+    })
+
+    socket.on('investigation-failed', () => {
+      setStatuses(['pending', 'pending', 'pending', 'pending'])
+      setLogs(['Investigation failed. Please try again from the dashboard.'])
+    })
+
+    return () => socket.disconnect()
+  }, [id])
+
+  // Fallback safety net: poll in case the socket connection missed anything.
   useEffect(() => {
     let pollInterval = null
 
@@ -64,9 +90,8 @@ function LiveInvestigation() {
       try {
         const { data } = await api.get(`/investigations/${id}`)
 
-        if (data.status === 'running' && !animationStartedRef.current) {
-          animationStartedRef.current = true
-          startAgentAnimation()
+        if (data.status === 'running') {
+          setStatuses(prev => (prev[0] === 'pending' ? ['running', ...prev.slice(1)] : prev))
         }
 
         if (data.status === 'complete') {
@@ -76,7 +101,6 @@ function LiveInvestigation() {
 
         if (data.status === 'failed') {
           clearInterval(pollInterval)
-          clearInterval(agentTimerRef.current)
           setStatuses(['pending', 'pending', 'pending', 'pending'])
           setLogs(['Investigation failed. Please try again from the dashboard.'])
         }
@@ -88,10 +112,7 @@ function LiveInvestigation() {
     checkStatus()
     pollInterval = setInterval(checkStatus, 3000)
 
-    return () => {
-      clearInterval(pollInterval)
-      clearInterval(agentTimerRef.current)
-    }
+    return () => clearInterval(pollInterval)
   }, [id])
 
   useEffect(() => {
