@@ -85,10 +85,17 @@ function Dashboard() {
             <span className="text-stone-900 font-extrabold text-base tracking-tight">TrustGhar</span>
           </div>
           <div className="flex items-center gap-1">
-            {['Dashboard', 'Investigations', 'Documents', 'Listings', 'Alerts', 'Monitor'].map((item, i) => (
-              <button key={i} className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all
-                ${i === 0 ? 'bg-indigo-500 text-white shadow-sm' : 'text-stone-400 hover:text-stone-700 hover:bg-stone-100'}`}>
-                {item}
+            {[
+              { label: 'Dashboard', path: '/dashboard' },
+              { label: 'Investigations', path: '/dashboard' },
+              { label: 'Documents', path: '/documents' },
+              { label: 'Listings', path: '/listings' },
+              { label: 'Alerts', path: '/alerts' },
+              { label: 'Monitor', path: '/monitor' },
+            ].map((item, i) => (
+              <button key={i} onClick={() => navigate(item.path)} className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all
+                ${item.label === 'Dashboard' ? 'bg-indigo-500 text-white shadow-sm' : 'text-stone-400 hover:text-stone-700 hover:bg-stone-100'}`}>
+                {item.label}
               </button>
             ))}
           </div>
@@ -171,7 +178,7 @@ function Dashboard() {
                 <p className="text-stone-400 text-sm px-6 py-6">No investigations yet — start your first one.</p>
               )}
               {investigations.map((item) => (
-                <div key={item._id} className="grid grid-cols-12 items-center px-6 py-3.5 hover:bg-indigo-50/30 transition-colors cursor-pointer group">
+                <div key={item._id} onClick={() => navigate(`/report/${item._id}`)} className="grid grid-cols-12 items-center px-6 py-3.5 hover:bg-indigo-50/30 transition-colors cursor-pointer group">
                   <div className="col-span-6 flex items-center gap-3">
                     <div className="bg-stone-100 group-hover:bg-indigo-100 transition-colors p-2 rounded-lg">
                       <MapPin className="w-3.5 h-3.5 text-stone-400 group-hover:text-indigo-500 transition-colors" />

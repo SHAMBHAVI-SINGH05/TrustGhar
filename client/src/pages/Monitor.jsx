@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ShieldCheck, Bell, LogOut, Radio, MapPin, XCircle } from 'lucide-react'
+import { ShieldCheck, Bell, LogOut, Radio, MapPin, XCircle, RefreshCw, Loader2 } from 'lucide-react'
 import api from '../api/axios'
 
 function Monitor() {
   const navigate = useNavigate()
   const [properties, setProperties] = useState([])
   const [loading, setLoading] = useState(true)
+  const [checkingId, setCheckingId] = useState(null)
+  const [checkResult, setCheckResult] = useState(null)
 
   const handleLogout = () => {
     localStorage.removeItem('token')
@@ -26,6 +28,20 @@ function Monitor() {
       setProperties((prev) => prev.filter((p) => p._id !== id))
     } catch (err) {
       console.error('Failed to stop monitoring:', err)
+    }
+  }
+
+  const checkNow = async (id) => {
+    setCheckingId(id)
+    setCheckResult(null)
+    try {
+      const { data } = await api.post(`/monitor/${id}/check-now`)
+      setProperties((prev) => prev.map((p) => (p._id === id ? { ...p, trustScore: data.newScore, status: 'complete' } : p)))
+      setCheckResult({ id, oldScore: data.oldScore, newScore: data.newScore })
+    } catch (err) {
+      console.error('Failed to run check:', err)
+    } finally {
+      setCheckingId(null)
     }
   }
 
@@ -92,20 +108,35 @@ function Monitor() {
             </div>
           )}
           {properties.map((prop) => (
-            <div key={prop._id} className="flex items-center gap-4 bg-white rounded-2xl p-4 shadow-sm border border-stone-100">
-              <div className="bg-indigo-50 p-3 rounded-xl shrink-0">
-                <MapPin className="w-4 h-4 text-indigo-500" />
+            <div key={prop._id} className="flex flex-col gap-2 bg-white rounded-2xl p-4 shadow-sm border border-stone-100">
+              <div className="flex items-center gap-4">
+                <div className="bg-indigo-50 p-3 rounded-xl shrink-0">
+                  <MapPin className="w-4 h-4 text-indigo-500" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-stone-800 text-sm font-semibold">{prop.propertyAddress}</p>
+                  <p className="text-stone-400 text-xs mt-0.5">
+                    {prop.status === 'complete' ? `Trust score: ${prop.trustScore}` : `Status: ${prop.status}`}
+                  </p>
+                </div>
+                <button
+                  onClick={() => checkNow(prop._id)}
+                  disabled={checkingId === prop._id}
+                  className="flex items-center gap-1.5 text-indigo-500 hover:text-indigo-600 text-xs font-semibold transition-colors shrink-0 disabled:opacity-50">
+                  {checkingId === prop._id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                  {checkingId === prop._id ? 'Checking...' : 'Check Now'}
+                </button>
+                <button onClick={() => stopMonitoring(prop._id)} className="flex items-center gap-1.5 text-stone-400 hover:text-red-500 text-xs font-semibold transition-colors shrink-0">
+                  <XCircle className="w-3.5 h-3.5" />
+                  Stop Monitoring
+                </button>
               </div>
-              <div className="flex-1">
-                <p className="text-stone-800 text-sm font-semibold">{prop.propertyAddress}</p>
-                <p className="text-stone-400 text-xs mt-0.5">
-                  {prop.status === 'complete' ? `Trust score: ${prop.trustScore}` : `Status: ${prop.status}`}
+              {checkResult?.id === prop._id && (
+                <p className="text-xs text-stone-500 pl-14">
+                  Checked: {checkResult.oldScore} → {checkResult.newScore}
+                  {checkResult.newScore !== checkResult.oldScore ? ' — changed, see Alerts for details' : ' — no change'}
                 </p>
-              </div>
-              <button onClick={() => stopMonitoring(prop._id)} className="flex items-center gap-1.5 text-stone-400 hover:text-red-500 text-xs font-semibold transition-colors shrink-0">
-                <XCircle className="w-3.5 h-3.5" />
-                Stop Monitoring
-              </button>
+              )}
             </div>
           ))}
         </div>

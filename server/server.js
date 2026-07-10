@@ -2,7 +2,9 @@ require('dotenv').config();
 const http = require('http');
 const mongoose = require('mongoose');
 const express = require('express');
+const cron = require('node-cron');
 const { init: initSocket } = require('./socket');
+const { checkAllMonitoredProperties } = require('./watchdog');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -30,6 +32,12 @@ io.on('connection', (socket) => {
   socket.on('join-investigation', (investigationId) => {
     socket.join(investigationId);
   });
+});
+
+const checkIntervalMinutes = parseInt(process.env.MONITOR_CHECK_INTERVAL_MINUTES, 10) || 30;
+cron.schedule(`*/${checkIntervalMinutes} * * * *`, () => {
+  console.log(`Running scheduled monitoring check (every ${checkIntervalMinutes} min)...`);
+  checkAllMonitoredProperties();
 });
 
 httpServer.listen(PORT, () => {
