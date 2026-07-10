@@ -12,6 +12,7 @@ app.use(require('cors')());
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/investigations', require('./routes/investigations'));
 app.use('/api/documents', require('./routes/documents'));
+app.use('/api/listings', require('./routes/listings'));
 app.use('/api/alerts', require('./routes/alerts'));
 app.use('/api/monitor', require('./routes/monitor'));
 app.use('/api/dashboard', require('./routes/dashboard'));

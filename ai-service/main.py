@@ -8,12 +8,17 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from graph import investigation_graph, groq_llm
 from document_analyzer import analyze_document
+from listing_analyzer import analyze_listing
 
 app = FastAPI()
 
 
 class InvestigationRequest(BaseModel):
     address: str
+
+
+class ListingRequest(BaseModel):
+    url: str
 
 
 @app.get("/")
@@ -61,4 +66,10 @@ async def investigate(request: InvestigationRequest):
 async def analyze_document_endpoint(file: UploadFile = File(...)):
     file_bytes = await file.read()
     result = await asyncio.to_thread(analyze_document, file_bytes, groq_llm)
+    return result
+
+
+@app.post("/check-listing")
+async def check_listing_endpoint(request: ListingRequest):
+    result = await asyncio.to_thread(analyze_listing, request.url, groq_llm)
     return result

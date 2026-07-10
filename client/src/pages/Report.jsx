@@ -113,7 +113,7 @@ function Report() {
             <span className="text-stone-900 font-extrabold text-base tracking-tight">TrustGhar</span>
           </div>
           <div className="flex items-center gap-1">
-            {['Dashboard', 'Investigations', 'Documents', 'Alerts', 'Monitor'].map((item, i) => (
+            {['Dashboard', 'Investigations', 'Documents', 'Listings', 'Alerts', 'Monitor'].map((item, i) => (
               <button key={i} className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all
                 ${i === 1 ? 'bg-indigo-500 text-white shadow-sm' : 'text-stone-400 hover:text-stone-700 hover:bg-stone-100'}`}>
                 {item}

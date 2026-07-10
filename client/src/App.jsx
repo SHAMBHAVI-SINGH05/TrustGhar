@@ -8,6 +8,7 @@ import Report from './pages/Report'
 import Alerts from './pages/Alerts'
 import Monitor from './pages/Monitor'
 import Documents from './pages/Documents'
+import FakeListingDetector from './pages/FakeListingDetector'
 import ProtectedRoute from './components/ProtectedRoute'
 import PageTransition from './components/PageTransition'
 
@@ -24,6 +25,7 @@ function App() {
         <Route path="/alerts" element={<ProtectedRoute><PageTransition><Alerts /></PageTransition></ProtectedRoute>} />
         <Route path="/monitor" element={<ProtectedRoute><PageTransition><Monitor /></PageTransition></ProtectedRoute>} />
         <Route path="/documents" element={<ProtectedRoute><PageTransition><Documents /></PageTransition></ProtectedRoute>} />
+        <Route path="/listings" element={<ProtectedRoute><PageTransition><FakeListingDetector /></PageTransition></ProtectedRoute>} />
       </Routes>
     </BrowserRouter>
   )

@@ -46,6 +46,7 @@ function Monitor() {
               { label: 'Dashboard', path: '/dashboard' },
               { label: 'Investigations', path: '/dashboard' },
               { label: 'Documents', path: '/documents' },
+              { label: 'Listings', path: '/listings' },
               { label: 'Alerts', path: '/alerts' },
               { label: 'Monitor', path: '/monitor' },
             ].map((item, i) => (
