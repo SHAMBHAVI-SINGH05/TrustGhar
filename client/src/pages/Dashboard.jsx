@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ShieldCheck, Search, Bell, LogOut, Eye, AlertTriangle, FileText, ChevronRight, Plus, FolderSearch, Upload, Radio, MapPin, CheckCircle, Clock, XCircle, ArrowUpRight, Activity } from 'lucide-react'
 import api from '../api/axios'
+import useUnreadAlerts from '../hooks/useUnreadAlerts'
 
 const severityStyle = {
   critical: 'bg-red-50 border-red-200 text-red-600',
@@ -42,6 +43,7 @@ function ScoreBar({ score }) {
 
 function Dashboard() {
   const navigate = useNavigate()
+  const unreadAlerts = useUnreadAlerts()
   const [investigations, setInvestigations] = useState([])
   const [loadingInvestigations, setLoadingInvestigations] = useState(true)
   const [stats, setStats] = useState({ totalInvestigations: 0, monitoredCount: 0, unreadAlerts: 0, completedReports: 0 })
@@ -101,9 +103,9 @@ function Dashboard() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button className="relative p-2 rounded-xl hover:bg-stone-100 transition-colors">
+          <button onClick={() => navigate('/alerts')} className="relative p-2 rounded-xl hover:bg-stone-100 transition-colors">
             <Bell className="w-4 h-4 text-stone-400" />
-            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-400 rounded-full" />
+            {unreadAlerts > 0 && <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-400 rounded-full" />}
           </button>
           <div className="flex items-center gap-2 bg-stone-100 rounded-full px-3 py-1.5">
             <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold">{userName ? userName[0].toUpperCase() : ''}</div>
@@ -118,7 +120,9 @@ function Dashboard() {
         {/* Welcome row */}
         <div className="flex items-end justify-between mb-8">
           <div>
-            <h1 className="text-stone-900 text-3xl font-extrabold tracking-tight mb-1">Welcome back{userName ? `, ${userName}` : ''}</h1>
+            <h1 className="text-stone-900 text-3xl font-extrabold tracking-tight mb-1">
+              {stats.totalInvestigations === 0 ? 'Welcome' : 'Welcome back'}{userName ? `, ${userName}` : ''}
+            </h1>
             <p className="text-stone-400 text-sm">Your property intelligence overview for today</p>
           </div>
           <button onClick={() => navigate('/investigate/new')} className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-lg shadow-indigo-200">
@@ -158,7 +162,7 @@ function Dashboard() {
                 <Activity className="w-4 h-4 text-indigo-500" />
                 <h2 className="text-stone-900 font-bold text-sm">Recent Investigations</h2>
               </div>
-              <button className="flex items-center gap-1 text-indigo-500 hover:text-indigo-600 text-xs font-semibold">
+              <button onClick={() => navigate('/investigations')} className="flex items-center gap-1 text-indigo-500 hover:text-indigo-600 text-xs font-semibold">
                 View all <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -229,11 +233,11 @@ function Dashboard() {
           <h2 className="text-stone-900 font-bold text-sm mb-4">Quick Actions</h2>
           <div className="grid grid-cols-3 gap-4">
             {[
-              { icon: <Search className="w-5 h-5 text-indigo-500" />, label: 'Start Investigation', sub: 'Analyze a new property with AI agents' },
-              { icon: <Upload className="w-5 h-5 text-indigo-500" />, label: 'Upload Document', sub: 'PDF analysis — sale deed, RERA certificate' },
-              { icon: <Radio className="w-5 h-5 text-indigo-500" />, label: 'Monitor Property', sub: 'Get alerted on changes & new complaints' },
+              { icon: <Search className="w-5 h-5 text-indigo-500" />, label: 'Start Investigation', sub: 'Analyze a new property with AI agents', path: '/investigate/new' },
+              { icon: <Upload className="w-5 h-5 text-indigo-500" />, label: 'Upload Document', sub: 'PDF analysis — sale deed, RERA certificate', path: '/documents' },
+              { icon: <Radio className="w-5 h-5 text-indigo-500" />, label: 'Monitor Property', sub: 'Get alerted on changes & new complaints', path: '/monitor' },
             ].map((a, i) => (
-              <button key={i} className="flex items-center gap-4 p-4 rounded-xl border border-stone-100 hover:border-indigo-200 hover:bg-indigo-50/50 transition-all text-left group w-full">
+              <button key={i} onClick={() => navigate(a.path)} className="flex items-center gap-4 p-4 rounded-xl border border-stone-100 hover:border-indigo-200 hover:bg-indigo-50/50 transition-all text-left group w-full">
                 <div className="bg-indigo-50 group-hover:bg-indigo-100 transition-colors p-3 rounded-xl shrink-0">
                   {a.icon}
                 </div>

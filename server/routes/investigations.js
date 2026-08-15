@@ -1,10 +1,21 @@
 const express = require('express');
 const { Readable } = require('stream');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const router = express.Router();
 const Investigation = require('../models/Investigation');
 const Job = require('../models/Job');
+const ChatMessage = require('../models/ChatMessage');
 const auth = require('../middleware/auth');
+const validateObjectId = require('../middleware/validateObjectId');
 const { getIO } = require('../socket');
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => { cb(null, 'uploads/'); },
+  filename: (req, file, cb) => { cb(null, Date.now() + path.extname(file.originalname)); },
+});
+const upload = multer({ storage });
 
 function computeTrustScore(result) {
   let score = 70;
@@ -19,19 +30,35 @@ function computeTrustScore(result) {
   return Math.max(10, Math.min(100, score));
 }
 
-async function runInvestigation(address, investigationId) {
+async function runInvestigation(address, investigationId, type, filePath) {
   const io = getIO();
   const roomId = investigationId.toString();
 
   try {
     await Investigation.findByIdAndUpdate(investigationId, { status: 'running' });
 
-    const response = await fetch('http://localhost:8000/investigate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ address }),
-      signal: AbortSignal.timeout(600000),
-    });
+    let response;
+    if (filePath) {
+      const fileBuffer = fs.readFileSync(filePath);
+      const blob = new Blob([fileBuffer], { type: 'application/pdf' });
+      const formData = new FormData();
+      formData.append('address', address);
+      formData.append('type', type);
+      formData.append('file', blob, path.basename(filePath));
+
+      response = await fetch('http://localhost:8000/investigate-with-document', {
+        method: 'POST',
+        body: formData,
+        signal: AbortSignal.timeout(600000),
+      });
+    } else {
+      response = await fetch('http://localhost:8000/investigate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address, type }),
+        signal: AbortSignal.timeout(600000),
+      });
+    }
 
     if (!response.ok) throw new Error(`AI service responded with ${response.status}`);
 
@@ -48,6 +75,7 @@ async function runInvestigation(address, investigationId) {
       for (const line of lines) {
         if (!line.trim()) continue;
         const update = JSON.parse(line);
+        if (update.error) throw new Error(update.error);
         const nodeName = Object.keys(update)[0];
         const nodeOutput = update[nodeName];
         Object.assign(accumulated, nodeOutput);
@@ -68,6 +96,7 @@ async function runInvestigation(address, investigationId) {
         fraud_score: accumulated.fraud_score,
         document_score: accumulated.document_score,
       },
+      fraudGraph: accumulated.fraud_graph || {},
       report: accumulated.final_report,
     }, { new: true });
 
@@ -79,15 +108,15 @@ async function runInvestigation(address, investigationId) {
     io.to(roomId).emit('investigation-complete', updated);
   } catch (err) {
     console.error('Investigation failed:', err.message);
-    await Investigation.findByIdAndUpdate(investigationId, { status: 'failed' });
+    await Investigation.findByIdAndUpdate(investigationId, { status: 'failed', error: err.message });
     await Job.findOneAndUpdate({ investigationId }, { status: 'failed' });
     io.to(roomId).emit('investigation-failed', { message: err.message });
   }
 }
 
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, upload.single('file'), async (req, res) => {
   try {
-    const { listingUrl, propertyAddress, builderName, state } = req.body;
+    const { listingUrl, propertyAddress, builderName, state, type } = req.body;
     const address = propertyAddress || listingUrl || builderName || 'Unknown property';
 
     const investigation = await Investigation.create({
@@ -95,6 +124,7 @@ router.post('/', auth, async (req, res) => {
       listingUrl,
       propertyAddress: address,
       status: 'pending',
+      type: type || 'full',
     });
 
     const job = await Job.create({
@@ -103,7 +133,7 @@ router.post('/', auth, async (req, res) => {
       status: 'queued',
     });
 
-    runInvestigation(address, investigation._id);
+    runInvestigation(address, investigation._id, investigation.type, req.file?.path);
 
     res.status(201).json({ investigationId: investigation._id, jobId: job._id });
   } catch (err) {
@@ -113,16 +143,17 @@ router.post('/', auth, async (req, res) => {
 
 router.get('/', auth, async (req, res) => {
   try {
+    const limit = parseInt(req.query.limit, 10) || 10;
     const investigations = await Investigation.find({ userId: req.userId })
       .sort({ createdAt: -1 })
-      .limit(10);
+      .limit(limit);
     res.json(investigations);
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
 
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, validateObjectId, async (req, res) => {
   try {
     const investigation = await Investigation.findOne({
       _id: req.params.id,
@@ -130,6 +161,75 @@ router.get('/:id', auth, async (req, res) => {
     });
     if (!investigation) return res.status(404).json({ message: 'Investigation not found' });
     res.json(investigation);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+router.get('/:id/chat', auth, validateObjectId, async (req, res) => {
+  try {
+    const investigation = await Investigation.findOne({ _id: req.params.id, userId: req.userId });
+    if (!investigation) return res.status(404).json({ message: 'Investigation not found' });
+
+    const messages = await ChatMessage.find({ investigationId: req.params.id }).sort({ createdAt: 1 });
+    res.json(messages);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+router.post('/:id/chat', auth, validateObjectId, async (req, res) => {
+  try {
+    const { question } = req.body;
+    if (!question || !question.trim()) {
+      return res.status(400).json({ message: 'Question is required' });
+    }
+
+    const investigation = await Investigation.findOne({ _id: req.params.id, userId: req.userId });
+    if (!investigation) return res.status(404).json({ message: 'Investigation not found' });
+    if (investigation.status !== 'complete') {
+      return res.status(400).json({ message: 'Chat is only available once the report is complete' });
+    }
+
+    const priorMessages = await ChatMessage.find({ investigationId: req.params.id }).sort({ createdAt: 1 });
+    const chatHistory = priorMessages.map((m) => ({ role: m.role, text: m.text }));
+
+    await ChatMessage.create({
+      investigationId: req.params.id,
+      userId: req.userId,
+      role: 'user',
+      text: question,
+    });
+
+    let reportContext = investigation.report || '';
+    const { rera_status, fraud_status, document_status } = investigation.agentOutputs || {};
+    if (rera_status) reportContext += `\n\nRERA CHECK:\n${rera_status}`;
+    if (fraud_status) reportContext += `\n\nFRAUD CHECK:\n${fraud_status}`;
+    if (document_status) reportContext += `\n\nDOCUMENT RISK:\n${document_status}`;
+
+    const response = await fetch('http://localhost:8000/report-qa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        address: investigation.propertyAddress,
+        report_context: reportContext,
+        question,
+        chat_history: chatHistory,
+      }),
+      signal: AbortSignal.timeout(120000),
+    });
+
+    if (!response.ok) throw new Error(`AI service responded with ${response.status}`);
+    const { answer } = await response.json();
+
+    const assistantMessage = await ChatMessage.create({
+      investigationId: req.params.id,
+      userId: req.userId,
+      role: 'assistant',
+      text: answer,
+    });
+
+    res.status(201).json(assistantMessage);
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }

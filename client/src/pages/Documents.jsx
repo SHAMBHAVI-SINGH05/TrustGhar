@@ -6,6 +6,7 @@ import {
   AlertTriangle, CheckCircle, XCircle, Loader2, ChevronRight, ShieldOff, Trash2
 } from 'lucide-react'
 import api from '../api/axios'
+import useUnreadAlerts from '../hooks/useUnreadAlerts'
 
 const documentTypes = ['Sale Deed', 'RERA Certificate', 'Allotment Letter', 'Possession Letter', 'Other']
 
@@ -163,12 +164,14 @@ function DocumentCard({ doc, onRefresh }) {
 
 function Documents() {
   const navigate = useNavigate()
+  const unreadAlerts = useUnreadAlerts()
   const [documents, setDocuments] = useState([])
   const [loading, setLoading] = useState(true)
   const [file, setFile] = useState(null)
   const [docType, setDocType] = useState(documentTypes[0])
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
+  const [userName, setUserName] = useState('')
   const pollRef = useRef(null)
 
   const handleLogout = () => {
@@ -189,6 +192,9 @@ function Documents() {
 
   useEffect(() => {
     fetchDocuments()
+    api.get('/auth/me')
+      .then((res) => setUserName(res.data.name))
+      .catch((err) => console.error('Failed to load user:', err))
   }, [])
 
   // Poll while any document is still analyzing
@@ -255,13 +261,13 @@ function Documents() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button className="relative p-2 rounded-xl hover:bg-stone-100 transition-colors">
+          <button onClick={() => navigate('/alerts')} className="relative p-2 rounded-xl hover:bg-stone-100 transition-colors">
             <Bell className="w-4 h-4 text-stone-400" />
-            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-400 rounded-full" />
+            {unreadAlerts > 0 && <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-400 rounded-full" />}
           </button>
           <div className="flex items-center gap-2 bg-stone-100 rounded-full px-3 py-1.5">
             <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold">S</div>
-            <span className="text-stone-700 text-sm font-medium">Shambhavi</span>
+            <span className="text-stone-700 text-sm font-medium">{userName}</span>
           </div>
           <button onClick={handleLogout} className="text-stone-400 hover:text-red-500 transition-colors p-1"><LogOut className="w-4 h-4" /></button>
         </div>

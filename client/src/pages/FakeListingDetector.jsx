@@ -5,6 +5,7 @@ import {
   ShieldAlert, CheckCircle, Loader2, ChevronRight, Trash2
 } from 'lucide-react'
 import api from '../api/axios'
+import useUnreadAlerts from '../hooks/useUnreadAlerts'
 
 const verdictStyle = {
   'likely genuine': { badge: 'bg-emerald-100 text-emerald-700' },
@@ -117,6 +118,7 @@ function ListingCard({ item, onRefresh }) {
 
 function FakeListingDetector() {
   const navigate = useNavigate()
+  const unreadAlerts = useUnreadAlerts()
   const [checks, setChecks] = useState([])
   const [loading, setLoading] = useState(true)
   const [url, setUrl] = useState('')
@@ -206,9 +208,9 @@ function FakeListingDetector() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button className="relative p-2 rounded-xl hover:bg-stone-100 transition-colors">
+          <button onClick={() => navigate('/alerts')} className="relative p-2 rounded-xl hover:bg-stone-100 transition-colors">
             <Bell className="w-4 h-4 text-stone-400" />
-            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-400 rounded-full" />
+            {unreadAlerts > 0 && <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-400 rounded-full" />}
           </button>
           <div className="flex items-center gap-2 bg-stone-100 rounded-full px-3 py-1.5">
             <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold">{userName ? userName[0].toUpperCase() : ''}</div>

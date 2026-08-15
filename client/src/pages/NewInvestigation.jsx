@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ShieldCheck, Bell, LogOut, MapPin, Link, ChevronDown, Zap, FileSearch, Brain, BarChart3, ArrowRight, Search } from 'lucide-react'
 import api from '../api/axios'
+import useUnreadAlerts from '../hooks/useUnreadAlerts'
 
 const indianStates = [
   'Andhra Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Delhi', 'Goa',
@@ -26,25 +27,58 @@ const agents = [
 
 function NewInvestigation() {
   const navigate = useNavigate()
+  const unreadAlerts = useUnreadAlerts()
   const handleLogout = () => {
     localStorage.removeItem('token')
     navigate('/login')
   }
   const [form, setForm] = useState({ address: '', listingUrl: '', state: '', type: 'full' })
+  const [file, setFile] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [userName, setUserName] = useState('')
+  const [platformStats, setPlatformStats] = useState(null)
+
+  useEffect(() => {
+    api.get('/auth/me')
+      .then((res) => setUserName(res.data.name))
+      .catch((err) => console.error('Failed to load user:', err))
+
+    api.get('/dashboard/platform-stats')
+      .then((res) => setPlatformStats(res.data))
+      .catch((err) => console.error('Failed to load platform stats:', err))
+  }, [])
+
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value })
   const handleType = (id) => setForm({ ...form, type: id })
 
   const handleStart = async () => {
     setError('')
+    if (form.type === 'document' && !file) {
+      setError('Please upload a PDF document for Document Only analysis.')
+      return
+    }
     setSubmitting(true)
     try {
-      const res = await api.post('/investigations', {
-        propertyAddress: form.address,
-        listingUrl: form.listingUrl,
-        state: form.state,
-      })
+      let res
+      if (form.type === 'document') {
+        const formData = new FormData()
+        formData.append('propertyAddress', form.address)
+        formData.append('listingUrl', form.listingUrl)
+        formData.append('state', form.state)
+        formData.append('type', form.type)
+        formData.append('file', file)
+        res = await api.post('/investigations', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+      } else {
+        res = await api.post('/investigations', {
+          propertyAddress: form.address,
+          listingUrl: form.listingUrl,
+          state: form.state,
+          type: form.type,
+        })
+      }
       navigate(`/investigate/live/${res.data.investigationId}`)
     } catch (err) {
       setError(err.response?.data?.message || 'Could not start investigation. Please try again.')
@@ -82,13 +116,13 @@ function NewInvestigation() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button className="relative p-2 rounded-xl hover:bg-stone-100 transition-colors">
+          <button onClick={() => navigate('/alerts')} className="relative p-2 rounded-xl hover:bg-stone-100 transition-colors">
             <Bell className="w-4 h-4 text-stone-400" />
-            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-400 rounded-full" />
+            {unreadAlerts > 0 && <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-400 rounded-full" />}
           </button>
           <div className="flex items-center gap-2 bg-stone-100 rounded-full px-3 py-1.5">
             <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold">S</div>
-            <span className="text-stone-700 text-sm font-medium">Shambhavi</span>
+            <span className="text-stone-700 text-sm font-medium">{userName}</span>
           </div>
           <button onClick={handleLogout} className="text-stone-400 hover:text-red-500 transition-colors p-1"><LogOut className="w-4 h-4" /></button>
         </div>
@@ -170,6 +204,16 @@ function NewInvestigation() {
               </div>
             </div>
 
+            {form.type === 'document' && (
+              <div className="bg-white rounded-2xl p-6 shadow-sm border border-stone-100">
+                <h2 className="text-stone-900 font-bold text-sm mb-1">Upload Document</h2>
+                <p className="text-stone-400 text-xs mb-4">Upload the sale deed / RERA certificate PDF you want analyzed</p>
+                <input type="file" accept=".pdf" onChange={(e) => setFile(e.target.files[0])}
+                  className="w-full border border-stone-200 rounded-xl px-4 py-3 text-stone-600 text-sm outline-none focus:border-indigo-400 transition-colors bg-white file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-600 file:text-xs file:font-semibold"
+                />
+              </div>
+            )}
+
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl px-4 py-2.5">
                 {error}
@@ -220,10 +264,10 @@ function NewInvestigation() {
               <p className="text-indigo-500 text-xs font-bold uppercase tracking-wider mb-3">Platform Stats</p>
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { value: '2,400+', label: 'Properties analyzed' },
-                  { value: '₹180Cr', label: 'Fraud detected' },
-                  { value: '94%', label: 'Accuracy rate' },
-                  { value: '12', label: 'States covered' },
+                  { value: platformStats?.propertiesInvestigated ?? '—', label: 'Properties investigated' },
+                  { value: platformStats?.documentsAnalyzed ?? '—', label: 'Documents analyzed' },
+                  { value: platformStats?.listingsChecked ?? '—', label: 'Listings checked' },
+                  { value: platformStats?.propertiesMonitored ?? '—', label: 'Properties monitored' },
                 ].map((s, i) => (
                   <div key={i}>
                     <p className="text-stone-800 font-extrabold text-lg">{s.value}</p>

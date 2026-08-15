@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ShieldCheck, Bell, LogOut, Download, Radio, ArrowLeft, CheckCircle, AlertTriangle, XCircle, GitBranch, Lock, Hourglass } from 'lucide-react'
+import { ShieldCheck, Bell, LogOut, Download, Radio, ArrowLeft, CheckCircle, AlertTriangle, XCircle, GitBranch, Hourglass, MessageCircle, Send } from 'lucide-react'
+import { jsPDF } from 'jspdf'
 import api from '../api/axios'
+import FraudGraph from '../components/FraudGraph'
+import useUnreadAlerts from '../hooks/useUnreadAlerts'
 
 const circumference = 2 * Math.PI * 54
 
@@ -22,12 +25,19 @@ function getSubScores(inv) {
   if (!inv?.agentOutputs) return []
   const { rera_status = '', fraud_status = '', document_status = '',
           rera_score, fraud_score, document_score } = inv.agentOutputs
-  return [
-    { label: 'RERA Compliance', value: rera_score ?? textToScore(rera_status) },
-    { label: 'Document Health', value: document_score ?? textToScore(document_status) },
-    { label: 'Builder Reputation', value: fraud_score ?? textToScore(rera_status + ' ' + fraud_status) },
-    { label: 'Fraud Risk (inverse)', value: fraud_score ?? textToScore(fraud_status) },
-  ]
+  const type = inv.type || 'full'
+  const reraRan = type === 'full' || type === 'quick'
+  const fraudRan = type === 'full'
+  const documentRan = type === 'full' || type === 'document'
+
+  const scores = []
+  if (reraRan) scores.push({ label: 'RERA Compliance', value: rera_score ?? textToScore(rera_status) })
+  if (documentRan) scores.push({ label: 'Document Health', value: document_score ?? textToScore(document_status) })
+  if (fraudRan) {
+    scores.push({ label: 'Builder Reputation', value: fraud_score ?? textToScore(rera_status + ' ' + fraud_status) })
+    scores.push({ label: 'Fraud Risk (inverse)', value: fraud_score ?? textToScore(fraud_status) })
+  }
+  return scores
 }
 
 function getFindings(inv) {
@@ -57,9 +67,20 @@ function getVerdict(score) {
 function Report() {
   const navigate = useNavigate()
   const { id } = useParams()
+  const unreadAlerts = useUnreadAlerts()
   const [investigation, setInvestigation] = useState(null)
   const [loading, setLoading] = useState(true)
   const [monitoring, setMonitoring] = useState(false)
+  const [userName, setUserName] = useState('')
+  const [chatMessages, setChatMessages] = useState([])
+  const [chatInput, setChatInput] = useState('')
+  const [chatSending, setChatSending] = useState(false)
+
+  useEffect(() => {
+    api.get('/auth/me')
+      .then((res) => setUserName(res.data.name))
+      .catch((err) => console.error('Failed to load user:', err))
+  }, [])
 
   const handleLogout = () => {
     localStorage.removeItem('token')
@@ -71,10 +92,106 @@ function Report() {
       .then((res) => {
         setInvestigation(res.data)
         setMonitoring(res.data.isMonitored)
+        if (res.data.status === 'complete') {
+          api.get(`/investigations/${id}/chat`)
+            .then((chatRes) => setChatMessages(chatRes.data))
+            .catch((err) => console.error('Failed to load chat history:', err))
+        }
       })
       .catch((err) => console.error('Failed to load investigation:', err))
       .finally(() => setLoading(false))
   }, [id])
+
+  const handleSendChat = async (e) => {
+    e.preventDefault()
+    const question = chatInput.trim()
+    if (!question || chatSending) return
+
+    setChatMessages((prev) => [...prev, { _id: `temp-${Date.now()}`, role: 'user', text: question }])
+    setChatInput('')
+    setChatSending(true)
+
+    try {
+      const res = await api.post(`/investigations/${id}/chat`, { question })
+      setChatMessages((prev) => [...prev, res.data])
+    } catch (err) {
+      console.error('Failed to send chat message:', err)
+      setChatMessages((prev) => [...prev, { _id: `temp-error-${Date.now()}`, role: 'assistant', text: 'Sorry, something went wrong answering that. Please try again.' }])
+    } finally {
+      setChatSending(false)
+    }
+  }
+
+  const handleDownloadPdf = () => {
+    const doc = new jsPDF()
+    const marginX = 14
+    let y = 20
+
+    doc.setFontSize(18)
+    doc.setFont(undefined, 'bold')
+    doc.text('TrustGhar — Property Trust Report', marginX, y)
+    y += 10
+
+    doc.setFontSize(11)
+    doc.setFont(undefined, 'normal')
+    doc.text(investigation.propertyAddress || 'Property', marginX, y)
+    y += 10
+
+    doc.setFontSize(14)
+    doc.setFont(undefined, 'bold')
+    doc.text(`Trust Score: ${score} / 100 — ${verdict.label}`, marginX, y)
+    y += 8
+
+    doc.setFontSize(10)
+    doc.setFont(undefined, 'normal')
+    const verdictLines = doc.splitTextToSize(verdict.desc, 180)
+    doc.text(verdictLines, marginX, y)
+    y += verdictLines.length * 5 + 6
+
+    doc.setFontSize(13)
+    doc.setFont(undefined, 'bold')
+    doc.text('Sub-Scores', marginX, y)
+    y += 7
+    doc.setFontSize(10)
+    doc.setFont(undefined, 'normal')
+    subScores.forEach((s) => {
+      doc.text(`${s.label}: ${s.value} / 100`, marginX, y)
+      y += 6
+    })
+    y += 4
+
+    doc.setFontSize(13)
+    doc.setFont(undefined, 'bold')
+    doc.text('Key Findings', marginX, y)
+    y += 7
+    doc.setFontSize(10)
+    doc.setFont(undefined, 'normal')
+    findings.forEach((f) => {
+      const lines = doc.splitTextToSize(`• ${f.text}`, 180)
+      if (y + lines.length * 5 > 280) { doc.addPage(); y = 20 }
+      doc.text(lines, marginX, y)
+      y += lines.length * 5 + 4
+    })
+    y += 4
+
+    if (investigation.report) {
+      if (y > 260) { doc.addPage(); y = 20 }
+      doc.setFontSize(13)
+      doc.setFont(undefined, 'bold')
+      doc.text('Full Report', marginX, y)
+      y += 7
+      doc.setFontSize(10)
+      doc.setFont(undefined, 'normal')
+      const reportLines = doc.splitTextToSize(investigation.report, 180)
+      reportLines.forEach((line) => {
+        if (y > 280) { doc.addPage(); y = 20 }
+        doc.text(line, marginX, y)
+        y += 5
+      })
+    }
+
+    doc.save(`${(investigation.propertyAddress || 'trust-report').replace(/[^a-z0-9]/gi, '-')}.pdf`)
+  }
 
   const handleMonitor = async () => {
     try {
@@ -94,6 +211,7 @@ function Report() {
   }
 
   const isComplete = investigation?.status === 'complete'
+  const isFailed = investigation?.status === 'failed'
   const score = investigation?.trustScore || 0
   const scoreColor = score >= 75 ? '#10b981' : score >= 50 ? '#f59e0b' : '#ef4444'
   const verdict = getVerdict(score)
@@ -129,13 +247,13 @@ function Report() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button className="relative p-2 rounded-xl hover:bg-stone-100 transition-colors">
+          <button onClick={() => navigate('/alerts')} className="relative p-2 rounded-xl hover:bg-stone-100 transition-colors">
             <Bell className="w-4 h-4 text-stone-400" />
-            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-400 rounded-full" />
+            {unreadAlerts > 0 && <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-400 rounded-full" />}
           </button>
           <div className="flex items-center gap-2 bg-stone-100 rounded-full px-3 py-1.5">
             <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold">S</div>
-            <span className="text-stone-700 text-sm font-medium">Shambhavi</span>
+            <span className="text-stone-700 text-sm font-medium">{userName}</span>
           </div>
           <button onClick={handleLogout} className="text-stone-400 hover:text-red-500 transition-colors p-1"><LogOut className="w-4 h-4" /></button>
         </div>
@@ -153,14 +271,24 @@ function Report() {
             <p className="text-stone-400 text-sm mt-1">{investigation?.propertyAddress}</p>
           </div>
           {isComplete && (
-            <button className="flex items-center gap-2 bg-white border border-stone-200 hover:border-indigo-300 text-stone-700 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-sm">
+            <button onClick={handleDownloadPdf} className="flex items-center gap-2 bg-white border border-stone-200 hover:border-indigo-300 text-stone-700 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-sm">
               <Download className="w-4 h-4" />
               Download PDF
             </button>
           )}
         </div>
 
-        {!isComplete && (
+        {isFailed && (
+          <div className="bg-white rounded-2xl p-10 text-center shadow-sm border border-stone-100 mb-6">
+            <XCircle className="w-8 h-8 text-red-400 mx-auto mb-3" />
+            <p className="text-stone-700 text-sm font-semibold mb-1">Investigation Failed</p>
+            <p className="text-stone-400 text-sm">
+              {investigation?.error || 'Something went wrong while analyzing this property. Please try starting a new investigation.'}
+            </p>
+          </div>
+        )}
+
+        {!isComplete && !isFailed && (
           <div className="bg-white rounded-2xl p-10 text-center shadow-sm border border-stone-100 mb-6">
             <Hourglass className="w-8 h-8 text-stone-300 mx-auto mb-3" />
             <p className="text-stone-700 text-sm font-semibold mb-1">Still processing</p>
@@ -247,9 +375,13 @@ function Report() {
                   <p className="text-stone-400 text-xs mb-4 leading-relaxed">
                     Visualize builder connections and detect hidden ownership links.
                   </p>
-                  <button disabled className="w-full flex items-center justify-center gap-2 bg-stone-100 text-stone-400 py-2.5 rounded-xl text-xs font-semibold cursor-not-allowed mt-auto">
-                    <Lock className="w-3.5 h-3.5" /> Coming Soon
-                  </button>
+                  {investigation.fraudGraph?.nodes?.length > 0 ? (
+                    <FraudGraph graph={investigation.fraudGraph} />
+                  ) : (
+                    <p className="text-stone-400 text-xs italic mt-auto">
+                      No additional builder network data found for this investigation.
+                    </p>
+                  )}
                 </div>
 
                 <button
@@ -274,6 +406,56 @@ function Report() {
                 </p>
               </div>
             )}
+
+            {/* Report Q&A chat */}
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-stone-100 mt-6">
+              <div className="flex items-center gap-2 mb-4">
+                <MessageCircle className="w-4 h-4 text-indigo-500" />
+                <h2 className="text-stone-900 font-bold text-sm">Ask About This Report</h2>
+              </div>
+
+              <div className="flex flex-col gap-3 max-h-96 overflow-y-auto mb-4 pr-1">
+                {chatMessages.length === 0 && (
+                  <p className="text-stone-400 text-sm">
+                    Ask a question about this investigation — e.g. "why is the fraud score low?" or "what does RERA say about possession delays here?"
+                  </p>
+                )}
+                {chatMessages.map((m) => (
+                  <div key={m._id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <p className={`max-w-[75%] text-sm leading-relaxed px-4 py-2.5 rounded-2xl
+                      ${m.role === 'user'
+                        ? 'bg-indigo-500 text-white rounded-br-sm'
+                        : 'bg-stone-100 text-stone-700 rounded-bl-sm'}`}>
+                      {m.text}
+                    </p>
+                  </div>
+                ))}
+                {chatSending && (
+                  <div className="flex justify-start">
+                    <p className="max-w-[75%] text-sm px-4 py-2.5 rounded-2xl rounded-bl-sm bg-stone-100 text-stone-400 italic">
+                      Thinking...
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <form onSubmit={handleSendChat} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Ask a question about this report..."
+                  disabled={chatSending}
+                  className="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-700 placeholder-stone-400 focus:outline-none focus:border-indigo-300 disabled:opacity-60"
+                />
+                <button
+                  type="submit"
+                  disabled={chatSending || !chatInput.trim()}
+                  className="bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2.5 rounded-xl transition-all shrink-0">
+                  <Send className="w-4 h-4" />
+                </button>
+              </form>
+            </div>
           </>
         )}
       </div>

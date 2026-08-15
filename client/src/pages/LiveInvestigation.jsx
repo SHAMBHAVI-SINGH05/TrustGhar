@@ -3,19 +3,19 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { io } from 'socket.io-client'
 import { ShieldCheck, Bell, LogOut, Search, Brain, FileSearch, BarChart3, CheckCircle, Loader2, Clock, ArrowRight } from 'lucide-react'
 import api from '../api/axios'
+import useUnreadAlerts from '../hooks/useUnreadAlerts'
 
-const agentDefs = [
-  { icon: Search, name: 'RERA Scraper Agent' },
-  { icon: Brain, name: 'Fraud Detector Agent' },
-  { icon: FileSearch, name: 'Document Analyzer Agent' },
-  { icon: BarChart3, name: 'Report Generator Agent' },
-]
+const agentDefsByNode = {
+  rera_check: { icon: Search, name: 'RERA Scraper Agent' },
+  fraud_check: { icon: Brain, name: 'Fraud Detector Agent' },
+  document_check: { icon: FileSearch, name: 'Document Analyzer Agent' },
+  generate_report: { icon: BarChart3, name: 'Report Generator Agent' },
+}
 
-const nodeToIndex = {
-  rera_check: 0,
-  fraud_check: 1,
-  document_check: 2,
-  generate_report: 3,
+const stepsByType = {
+  full: ['rera_check', 'fraud_check', 'document_check', 'generate_report'],
+  quick: ['rera_check', 'generate_report'],
+  document: ['document_check', 'generate_report'],
 }
 
 function extractText(node, output) {
@@ -29,11 +29,19 @@ function extractText(node, output) {
 function LiveInvestigation() {
   const navigate = useNavigate()
   const { id } = useParams()
+  const unreadAlerts = useUnreadAlerts()
   const [investigation, setInvestigation] = useState(null)
+  const [steps, setSteps] = useState(stepsByType.full)
   const [statuses, setStatuses] = useState(['pending', 'pending', 'pending', 'pending'])
   const [logs, setLogs] = useState([])
+  const [userName, setUserName] = useState('')
   const logEndRef = useRef(null)
   const socketRef = useRef(null)
+  const stepsRef = useRef(steps)
+
+  useEffect(() => {
+    stepsRef.current = steps
+  }, [steps])
 
   const handleLogout = () => {
     localStorage.removeItem('token')
@@ -41,7 +49,7 @@ function LiveInvestigation() {
   }
 
   const showCompleteState = (inv) => {
-    setStatuses(['done', 'done', 'done', 'done'])
+    setStatuses(stepsRef.current.map(() => 'done'))
     setInvestigation(inv)
     const realLogs = []
     if (inv.agentOutputs?.rera_status) realLogs.push(`RERA: ${inv.agentOutputs.rera_status.substring(0, 160)}`)
@@ -51,6 +59,12 @@ function LiveInvestigation() {
     setLogs(realLogs)
   }
 
+  useEffect(() => {
+    api.get('/auth/me')
+      .then((res) => setUserName(res.data.name))
+      .catch((err) => console.error('Failed to load user:', err))
+  }, [])
+
   // Real-time updates: listen for each agent actually finishing.
   useEffect(() => {
     const socket = io('http://localhost:5000')
@@ -59,15 +73,15 @@ function LiveInvestigation() {
     socket.emit('join-investigation', id)
 
     socket.on('agent-update', ({ node, output }) => {
-      const index = nodeToIndex[node]
-      if (index === undefined) return
+      const index = stepsRef.current.indexOf(node)
+      if (index === -1) return
       const text = extractText(node, output)
       setStatuses(prev => prev.map((s, i) => {
         if (i <= index) return 'done'
         if (i === index + 1) return 'running'
         return s
       }))
-      setLogs(prev => [...prev, `${agentDefs[index].name}: ${(text || '').substring(0, 160)}`])
+      setLogs(prev => [...prev, `${agentDefsByNode[node].name}: ${(text || '').substring(0, 160)}`])
     })
 
     socket.on('investigation-complete', (inv) => {
@@ -75,7 +89,7 @@ function LiveInvestigation() {
     })
 
     socket.on('investigation-failed', () => {
-      setStatuses(['pending', 'pending', 'pending', 'pending'])
+      setStatuses(stepsRef.current.map(() => 'pending'))
       setLogs(['Investigation failed. Please try again from the dashboard.'])
     })
 
@@ -85,10 +99,18 @@ function LiveInvestigation() {
   // Fallback safety net: poll in case the socket connection missed anything.
   useEffect(() => {
     let pollInterval = null
+    let typeKnown = false
 
     const checkStatus = async () => {
       try {
         const { data } = await api.get(`/investigations/${id}`)
+
+        if (!typeKnown) {
+          typeKnown = true
+          const activeSteps = stepsByType[data.type] || stepsByType.full
+          setSteps(activeSteps)
+          setStatuses(activeSteps.map(() => 'pending'))
+        }
 
         if (data.status === 'running') {
           setStatuses(prev => (prev[0] === 'pending' ? ['running', ...prev.slice(1)] : prev))
@@ -101,7 +123,7 @@ function LiveInvestigation() {
 
         if (data.status === 'failed') {
           clearInterval(pollInterval)
-          setStatuses(['pending', 'pending', 'pending', 'pending'])
+          setStatuses(stepsRef.current.map(() => 'pending'))
           setLogs(['Investigation failed. Please try again from the dashboard.'])
         }
       } catch (err) {
@@ -150,13 +172,13 @@ function LiveInvestigation() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button className="relative p-2 rounded-xl hover:bg-stone-100 transition-colors">
+          <button onClick={() => navigate('/alerts')} className="relative p-2 rounded-xl hover:bg-stone-100 transition-colors">
             <Bell className="w-4 h-4 text-stone-400" />
-            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-400 rounded-full" />
+            {unreadAlerts > 0 && <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-400 rounded-full" />}
           </button>
           <div className="flex items-center gap-2 bg-stone-100 rounded-full px-3 py-1.5">
             <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold">S</div>
-            <span className="text-stone-700 text-sm font-medium">Shambhavi</span>
+            <span className="text-stone-700 text-sm font-medium">{userName}</span>
           </div>
           <button onClick={handleLogout} className="text-stone-400 hover:text-red-500 transition-colors p-1">
             <LogOut className="w-4 h-4" />
@@ -178,7 +200,8 @@ function LiveInvestigation() {
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-stone-100">
             <h2 className="text-stone-900 font-bold text-sm mb-5">Agent Pipeline</h2>
             <div className="flex flex-col gap-4">
-              {agentDefs.map((agent, i) => {
+              {steps.map((node, i) => {
+                const agent = agentDefsByNode[node]
                 const Icon = agent.icon
                 const status = statuses[i]
                 return (
@@ -189,7 +212,7 @@ function LiveInvestigation() {
                         <Icon className={`w-4 h-4
                           ${status === 'done' ? 'text-emerald-500' : status === 'running' ? 'text-indigo-500' : 'text-stone-300'}`} />
                       </div>
-                      {i < agentDefs.length - 1 && <div className="w-px h-8 bg-stone-200 mt-1" />}
+                      {i < steps.length - 1 && <div className="w-px h-8 bg-stone-200 mt-1" />}
                     </div>
                     <div className="flex-1 pt-1">
                       <div className="flex items-center justify-between">

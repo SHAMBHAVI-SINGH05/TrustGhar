@@ -23,11 +23,18 @@ function Alerts() {
   const navigate = useNavigate()
   const [alerts, setAlerts] = useState([])
   const [loading, setLoading] = useState(true)
+  const [userName, setUserName] = useState('')
 
   const handleLogout = () => {
     localStorage.removeItem('token')
     navigate('/login')
   }
+
+  useEffect(() => {
+    api.get('/auth/me')
+      .then((res) => setUserName(res.data.name))
+      .catch((err) => console.error('Failed to load user:', err))
+  }, [])
 
   useEffect(() => {
   api.get('/alerts')
@@ -86,11 +93,11 @@ const markAllAsRead = async () => {
         <div className="flex items-center gap-3">
           <button className="relative p-2 rounded-xl hover:bg-stone-100 transition-colors">
             <Bell className="w-4 h-4 text-stone-400" />
-            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-400 rounded-full" />
+            {unreadCount > 0 && <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-400 rounded-full" />}
           </button>
           <div className="flex items-center gap-2 bg-stone-100 rounded-full px-3 py-1.5">
             <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold">S</div>
-            <span className="text-stone-700 text-sm font-medium">Shambhavi</span>
+            <span className="text-stone-700 text-sm font-medium">{userName}</span>
           </div>
           <button onClick={handleLogout} className="text-stone-400 hover:text-red-500 transition-colors p-1"><LogOut className="w-4 h-4" /></button>
         </div>
