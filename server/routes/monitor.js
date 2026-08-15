@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Investigation = require('../models/Investigation');
 const auth = require('../middleware/auth');
+const validateObjectId = require('../middleware/validateObjectId');
 const { checkInvestigation } = require('../watchdog');
 
 router.post('/', auth, async (req, res) => {
@@ -26,7 +27,7 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-router.post('/:id/check-now', auth, async (req, res) => {
+router.post('/:id/check-now', auth, validateObjectId, async (req, res) => {
   try {
     const investigation = await Investigation.findOne({ _id: req.params.id, userId: req.userId });
     if (!investigation) return res.status(404).json({ message: 'Investigation not found' });
@@ -39,7 +40,7 @@ router.post('/:id/check-now', auth, async (req, res) => {
   }
 });
 
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, validateObjectId, async (req, res) => {
   try {
     await Investigation.findOneAndUpdate(
       { _id: req.params.id, userId: req.userId },

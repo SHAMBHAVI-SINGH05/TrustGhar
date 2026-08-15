@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import time
 import nest_asyncio
 from typing import TypedDict
@@ -21,8 +22,11 @@ groq_llm = LLM(
 
 class InvestigationState(TypedDict):
     address: str
+    type: str
+    uploaded_document_text: str
     rera_status: str
     fraud_status: str
+    fraud_graph: dict
     document_status: str
     final_report: str
     trust_score: int
@@ -87,6 +91,14 @@ def _parse_score(label: str, text: str, default: int = 60) -> int:
     return default
 
 
+def _clean_agent_text(text: str) -> str:
+    # Groq's llama-3.3-70b sometimes writes out its tool-call attempt as
+    # plain text (e.g. <function(web_search)>{"query": "..."}</function>)
+    # instead of invoking the tool silently. Strip that leftover artifact
+    # so it never reaches the UI or the PDF report.
+    return re.sub(r'<function\([^)]*\)>.*?</function>', '', text, flags=re.DOTALL).strip()
+
+
 def rera_node(state: InvestigationState):
     address = state["address"]
     task = Task(
@@ -112,7 +124,7 @@ def rera_node(state: InvestigationState):
         agent=rera_agent,
     )
     result = Crew(agents=[rera_agent], tasks=[task]).kickoff()
-    return {"rera_status": str(result)}
+    return {"rera_status": _clean_agent_text(str(result))}
 
 
 def fraud_node(state: InvestigationState):
@@ -128,95 +140,186 @@ def fraud_node(state: InvestigationState):
             f"3. Builder name + 'court case possession delay'\n"
             f"4. Property name + 'scam complaint'\n"
             f"5. Builder name + 'insolvency NCLT'\n\n"
+            f"While searching, also note any real OWNERSHIP OR CORPORATE connections to the builder that "
+            f"come up: subsidiary or group companies, named directors/promoters, and other projects by the "
+            f"same builder mentioned in complaints or news. Only include an entity if you found an actual "
+            f"ownership, directorship, or 'also developed by the same builder' link in your search results — "
+            f"never connect two entities just because they share a name or are in the same area. Two "
+            f"companies both being located in the same neighborhood is NOT a connection worth graphing. "
+            f"If you found no genuine corporate connections beyond the builder itself, that's fine and "
+            f"expected — just include the builder as the only node with no edges. A graph with one node "
+            f"and no fraud is more honest and useful than a graph padded with irrelevant links.\n\n"
             f"Report what you actually find:\n"
             f"- Any active fraud cases or FIRs\n"
             f"- Court orders against the builder\n"
             f"- Consumer forum complaints\n"
             f"- Financial health signals\n"
-            f"- Overall fraud risk: Low / Medium / High"
+            f"- Overall fraud risk: Low / Medium / High\n\n"
+            f"Output ONLY valid JSON in exactly this format, nothing else:\n"
+            f'{{"summary": "4-6 sentences reporting actual fraud findings, specific cases and sources '
+            f'where found, and overall fraud risk level", '
+            f'"graph": {{"nodes": [{{"id": "string", "label": "entity name", "type": one of exactly '
+            f'"builder", "subsidiary", "director", or "project" — no other values allowed}}], '
+            f'"edges": [{{"source": "node id", "target": "node id", "relation": one of exactly '
+            f'"subsidiary_of", "director_of", or "also_developed" — no other values allowed, and only for '
+            f'genuine ownership/corporate links, never location or name coincidences}}]}}}}'
         ),
         expected_output=(
-            "4-6 sentences reporting actual fraud findings. Include specific cases and sources where found. "
-            "State overall fraud risk level."
+            "Valid JSON with a summary string reporting actual fraud findings and a graph object "
+            "containing nodes and edges for real entities found during the search."
         ),
         agent=fraud_agent,
     )
-    result = Crew(agents=[fraud_agent], tasks=[task]).kickoff()
-    return {"fraud_status": str(result)}
+    result_text = _clean_agent_text(str(Crew(agents=[fraud_agent], tasks=[task]).kickoff()))
+
+    try:
+        json_match = re.search(r'\{[\s\S]*\}', result_text)
+        if json_match:
+            parsed = json.loads(json_match.group())
+            return {
+                "fraud_status": _clean_agent_text(parsed.get("summary", result_text)),
+                "fraud_graph": parsed.get("graph", {"nodes": [], "edges": []}),
+            }
+    except Exception:
+        pass
+
+    return {"fraud_status": result_text, "fraud_graph": {"nodes": [], "edges": []}}
 
 
 def document_node(state: InvestigationState):
     time.sleep(15)
-    address = state["address"]
-    task = Task(
-        description=(
-            f"Investigate document risks and buyer complaints for: '{address}'.\n\n"
-            f"Step 1 — Web search:\n"
-            f"1. Builder name + 'possession delay complaint'\n"
-            f"2. Builder name + 'sale deed clause problem'\n"
-            f"3. Property name + 'buyer review complaint'\n"
-            f"4. Builder name + 'OC certificate delay'\n\n"
-            f"Step 2 — Legal search:\n"
-            f"Use the RERA Legal Search tool to find:\n"
-            f"- What RERA says about possession delays and the penalty the builder must pay\n"
-            f"- What the law says about force majeure clauses\n"
-            f"- What an Occupancy Certificate (OC) is and why it matters\n\n"
-            f"Report what buyer complaints you found AND cite the actual RERA law that gives "
-            f"the buyer rights in each situation."
-        ),
-        expected_output=(
-            "4-6 sentences reporting real buyer complaints found online, the key documents to verify, "
-            "and the specific RERA legal provision that protects the buyer for each risk identified."
-        ),
-        agent=document_agent,
-    )
+    uploaded_text = state.get("uploaded_document_text", "")
+
+    if uploaded_text:
+        task = Task(
+            description=(
+                f"Analyze this real uploaded property document for risky clauses and missing "
+                f"buyer protections:\n\n"
+                f"--- DOCUMENT TEXT ---\n{uploaded_text[:6000]}\n--- END ---\n\n"
+                f"Use the RERA Legal Search tool to check each risky clause you find against the "
+                f"actual RERA law that applies to it.\n\n"
+                f"Report:\n"
+                f"- The key risky clauses actually present in this document, quoting them briefly\n"
+                f"- The RERA section that applies to each\n"
+                f"- Any important buyer protections that are missing from this document\n"
+                f"- Overall document risk: Low / Medium / High"
+            ),
+            expected_output=(
+                "4-6 sentences reporting the actual risky clauses found in the uploaded document, "
+                "quoting them briefly, citing the RERA section that applies to each, noting missing "
+                "buyer protections, and an overall risk verdict."
+            ),
+            agent=document_agent,
+        )
+    else:
+        address = state["address"]
+        task = Task(
+            description=(
+                f"Investigate document risks and buyer complaints for: '{address}'.\n\n"
+                f"Step 1 — Web search:\n"
+                f"1. Builder name + 'possession delay complaint'\n"
+                f"2. Builder name + 'sale deed clause problem'\n"
+                f"3. Property name + 'buyer review complaint'\n"
+                f"4. Builder name + 'OC certificate delay'\n\n"
+                f"Step 2 — Legal search:\n"
+                f"Use the RERA Legal Search tool to find:\n"
+                f"- What RERA says about possession delays and the penalty the builder must pay\n"
+                f"- What the law says about force majeure clauses\n"
+                f"- What an Occupancy Certificate (OC) is and why it matters\n\n"
+                f"Report what buyer complaints you found AND cite the actual RERA law that gives "
+                f"the buyer rights in each situation."
+            ),
+            expected_output=(
+                "4-6 sentences reporting real buyer complaints found online, the key documents to verify, "
+                "and the specific RERA legal provision that protects the buyer for each risk identified."
+            ),
+            agent=document_agent,
+        )
+
     result = Crew(agents=[document_agent], tasks=[task]).kickoff()
-    return {"document_status": str(result)}
+    return {"document_status": _clean_agent_text(str(result))}
 
 
 def report_node(state: InvestigationState):
     time.sleep(15)
+    rera_ran = state["type"] in ("full", "quick")
+    fraud_ran = state["type"] == "full"
+    document_ran = state["type"] in ("full", "document")
+
+    findings_section = ""
+    if rera_ran:
+        findings_section += f"RERA CHECK:\n{state['rera_status']}\n\n"
+    if fraud_ran:
+        findings_section += f"FRAUD CHECK:\n{state['fraud_status']}\n\n"
+    if document_ran:
+        findings_section += f"DOCUMENT RISK:\n{state['document_status']}\n\n"
+
+    score_format = "TRUST_SCORE: [0-100 overall trust score — higher means safer]\n"
+    if rera_ran:
+        score_format += "RERA_SCORE: [0-100 based on RERA compliance found]\n"
+    if fraud_ran:
+        score_format += "FRAUD_SCORE: [0-100 based on fraud findings — higher means less fraud risk]\n"
+    if document_ran:
+        score_format += "DOCUMENT_SCORE: [0-100 based on document risks found]\n"
+    score_format += "VERDICT: [exactly one of: Safe / Caution / Do Not Proceed]\n"
+
+    expected_scores = ["TRUST_SCORE"]
+    if rera_ran:
+        expected_scores.append("RERA_SCORE")
+    if fraud_ran:
+        expected_scores.append("FRAUD_SCORE")
+    if document_ran:
+        expected_scores.append("DOCUMENT_SCORE")
+
     task = Task(
         description=(
             f"Write the final trust report for property: '{state['address']}'\n\n"
             f"Based on these actual investigation findings:\n\n"
-            f"RERA CHECK:\n{state['rera_status']}\n\n"
-            f"FRAUD CHECK:\n{state['fraud_status']}\n\n"
-            f"DOCUMENT RISK:\n{state['document_status']}\n\n"
+            f"{findings_section}"
             f"You must output EXACTLY in this format:\n\n"
-            f"TRUST_SCORE: [0-100 overall trust score — higher means safer]\n"
-            f"RERA_SCORE: [0-100 based on RERA compliance found]\n"
-            f"FRAUD_SCORE: [0-100 based on fraud findings — higher means less fraud risk]\n"
-            f"DOCUMENT_SCORE: [0-100 based on document risks found]\n"
-            f"VERDICT: [exactly one of: Safe / Caution / Do Not Proceed]\n\n"
+            f"{score_format}\n"
             f"REPORT:\n"
             f"[3-4 sentences in plain English for an Indian home buyer. State the overall trust "
-            f"level, mention the 2-3 most important findings, give one specific action to take.]"
+            f"level, mention the 2-3 most important findings, give one specific action to take. "
+            f"Only comment on checks that were actually run — do not mention or guess at findings "
+            f"for checks that were skipped.]"
         ),
         expected_output=(
-            "Structured output with TRUST_SCORE, RERA_SCORE, FRAUD_SCORE, DOCUMENT_SCORE, VERDICT "
+            f"Structured output with {', '.join(expected_scores)}, VERDICT "
             "followed by REPORT section with 3-4 sentence plain English verdict."
         ),
         agent=report_agent,
     )
     result = Crew(agents=[report_agent], tasks=[task]).kickoff()
-    result_text = str(result)
-
-    trust_score = _parse_score("TRUST_SCORE", result_text, 60)
-    rera_score = _parse_score("RERA_SCORE", result_text, 60)
-    fraud_score = _parse_score("FRAUD_SCORE", result_text, 60)
-    document_score = _parse_score("DOCUMENT_SCORE", result_text, 60)
+    result_text = _clean_agent_text(str(result))
 
     report_match = re.search(r'REPORT:\s*\n(.*)', result_text, re.DOTALL | re.IGNORECASE)
     report_text = report_match.group(1).strip() if report_match else result_text
 
-    return {
+    output = {
         "final_report": report_text,
-        "trust_score": trust_score,
-        "rera_score": rera_score,
-        "fraud_score": fraud_score,
-        "document_score": document_score,
+        "trust_score": _parse_score("TRUST_SCORE", result_text, 60),
     }
+    if rera_ran:
+        output["rera_score"] = _parse_score("RERA_SCORE", result_text, 60)
+    if fraud_ran:
+        output["fraud_score"] = _parse_score("FRAUD_SCORE", result_text, 60)
+    if document_ran:
+        output["document_score"] = _parse_score("DOCUMENT_SCORE", result_text, 60)
+
+    return output
+
+
+def route_start(state: InvestigationState):
+    if state["type"] == "document":
+        return "document_check"
+    return "rera_check"
+
+
+def route_after_rera(state: InvestigationState):
+    if state["type"] == "quick":
+        return "generate_report"
+    return "fraud_check"
 
 
 graph = StateGraph(InvestigationState)
@@ -225,8 +328,8 @@ graph.add_node("fraud_check", fraud_node)
 graph.add_node("document_check", document_node)
 graph.add_node("generate_report", report_node)
 
-graph.add_edge(START, "rera_check")
-graph.add_edge("rera_check", "fraud_check")
+graph.add_conditional_edges(START, route_start, ["rera_check", "document_check"])
+graph.add_conditional_edges("rera_check", route_after_rera, ["fraud_check", "generate_report"])
 graph.add_edge("fraud_check", "document_check")
 graph.add_edge("document_check", "generate_report")
 graph.add_edge("generate_report", END)
@@ -237,8 +340,11 @@ investigation_graph = graph.compile()
 if __name__ == "__main__":
     result = investigation_graph.invoke({
         "address": "Prestige Towers, Whitefield, Bangalore",
+        "type": "full",
+        "uploaded_document_text": "",
         "rera_status": "",
         "fraud_status": "",
+        "fraud_graph": {},
         "document_status": "",
         "final_report": "",
         "trust_score": 0,
@@ -248,6 +354,7 @@ if __name__ == "__main__":
     })
     print("\nRERA:\n", result["rera_status"])
     print("\nFRAUD:\n", result["fraud_status"])
+    print("\nFRAUD GRAPH:\n", result["fraud_graph"])
     print("\nDOCUMENTS:\n", result["document_status"])
     print(f"\nSCORES: Trust={result['trust_score']} RERA={result['rera_score']} Fraud={result['fraud_score']} Doc={result['document_score']}")
     print("\nFINAL REPORT:\n", result["final_report"])

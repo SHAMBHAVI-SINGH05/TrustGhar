@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const Document = require('../models/Document');
 const auth = require('../middleware/auth');
+const validateObjectId = require('../middleware/validateObjectId');
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => { cb(null, 'uploads/'); },
@@ -68,7 +69,7 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, validateObjectId, async (req, res) => {
   try {
     const document = await Document.findOne({ _id: req.params.id, userId: req.userId });
     if (!document) return res.status(404).json({ message: 'Document not found' });
@@ -78,7 +79,7 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, validateObjectId, async (req, res) => {
   try {
     const document = await Document.findOne({ _id: req.params.id, userId: req.userId });
     if (!document) return res.status(404).json({ message: 'Document not found' });

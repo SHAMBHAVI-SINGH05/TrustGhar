@@ -51,6 +51,7 @@ async function checkInvestigation(investigation) {
       fraud_score: accumulated.fraud_score,
       document_score: accumulated.document_score,
     },
+    fraudGraph: accumulated.fraud_graph || {},
     report: accumulated.final_report,
   });
 

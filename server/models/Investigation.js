@@ -5,10 +5,12 @@ const investigationSchema = new mongoose.Schema({
   propertyAddress: { type: String },
   listingUrl: { type: String },
   status: { type: String, enum: ['pending', 'running', 'complete', 'failed'], default: 'pending' },
+  type: { type: String, enum: ['full', 'quick', 'document'], default: 'full' },
   trustScore: { type: Number, default: 0 },
   agentOutputs: { type: Object, default: {} },
   fraudGraph: { type: Object, default: {} },
   report: { type: String },
+  error: { type: String },
   isMonitored: { type: Boolean, default: false },
 }, { timestamps: true });
 

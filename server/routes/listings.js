@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const ListingCheck = require('../models/ListingCheck');
 const auth = require('../middleware/auth');
+const validateObjectId = require('../middleware/validateObjectId');
 
 async function runListingCheck(listingCheckId, url) {
   try {
@@ -52,7 +53,7 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, validateObjectId, async (req, res) => {
   try {
     const listingCheck = await ListingCheck.findOne({ _id: req.params.id, userId: req.userId });
     if (!listingCheck) return res.status(404).json({ message: 'Listing check not found' });
@@ -62,7 +63,7 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, validateObjectId, async (req, res) => {
   try {
     const listingCheck = await ListingCheck.findOne({ _id: req.params.id, userId: req.userId });
     if (!listingCheck) return res.status(404).json({ message: 'Listing check not found' });
