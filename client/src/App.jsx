@@ -1,7 +1,9 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
+import ResetPassword from './pages/ResetPassword'
 import Dashboard from './pages/Dashboard'
+import AllInvestigations from './pages/AllInvestigations'
 import NewInvestigation from './pages/NewInvestigation'
 import LiveInvestigation from './pages/LiveInvestigation'
 import Report from './pages/Report'
@@ -18,7 +20,9 @@ function App() {
       <Routes>
         <Route path="/" element={<PageTransition><Landing /></PageTransition>} />
         <Route path="/login" element={<PageTransition><Login /></PageTransition>} />
+        <Route path="/reset-password/:token" element={<PageTransition><ResetPassword /></PageTransition>} />
         <Route path="/dashboard" element={<ProtectedRoute><PageTransition><Dashboard /></PageTransition></ProtectedRoute>} />
+        <Route path="/investigations" element={<ProtectedRoute><PageTransition><AllInvestigations /></PageTransition></ProtectedRoute>} />
         <Route path="/investigate/new" element={<ProtectedRoute><PageTransition><NewInvestigation /></PageTransition></ProtectedRoute>} />
         <Route path="/investigate/live/:id" element={<ProtectedRoute><PageTransition><LiveInvestigation /></PageTransition></ProtectedRoute>} />
         <Route path="/report/:id" element={<ProtectedRoute><PageTransition><Report /></PageTransition></ProtectedRoute>} />

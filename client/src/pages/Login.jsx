@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Eye, EyeOff, ShieldCheck, FileSearch, GitBranch, BarChart3 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { GoogleLogin } from '@react-oauth/google'
 import api from '../api/axios'
 
 
@@ -18,6 +19,9 @@ function Login() {
   const [form, setForm] = useState({ name: '', email: '', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotMsg, setForgotMsg] = useState('')
+  const [forgotLoading, setForgotLoading] = useState(false)
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value })
 
@@ -33,6 +37,34 @@ function Login() {
   }
 
   const passwordStrength = getPasswordStrength(form.password)
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    setError('')
+    setLoading(true)
+    try {
+      const res = await api.post('/auth/google', { credential: credentialResponse.credential })
+      localStorage.setItem('token', res.data.token)
+      navigate('/dashboard')
+    } catch (err) {
+      setError(err.response?.data?.message || 'Google sign-in failed. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleForgotSubmit = async (e) => {
+    e.preventDefault()
+    setForgotMsg('')
+    setForgotLoading(true)
+    try {
+      const res = await api.post('/auth/forgot-password', { email: forgotEmail })
+      setForgotMsg(res.data.message)
+    } catch (err) {
+      setForgotMsg(err.response?.data?.message || 'Something went wrong. Please try again.')
+    } finally {
+      setForgotLoading(false)
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -121,6 +153,42 @@ function Login() {
           </h2>
           <p className="text-stone-500 text-center text-sm mb-6">Login or create an account to continue</p>
 
+          {activeTab === 'forgot' ? (
+            <>
+              <h3 className="text-stone-800 text-lg font-bold mb-1">Reset your password</h3>
+              <p className="text-stone-500 text-sm mb-6">Enter your email and we'll send you a reset link.</p>
+
+              {forgotMsg && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-700 text-sm rounded-lg px-4 py-2.5 mb-4">
+                  {forgotMsg}
+                </div>
+              )}
+
+              <form onSubmit={handleForgotSubmit}>
+                <div className="mb-6">
+                  <label className="text-stone-700 text-sm font-medium mb-1.5 block">Email</label>
+                  <input
+                    type="email" placeholder="Enter your email"
+                    value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)}
+                    className="w-full bg-white border border-stone-200 rounded-lg px-4 py-3 text-stone-900 outline-none focus:border-amber-500 transition-colors text-sm"
+                  />
+                </div>
+                <button type="submit" disabled={forgotLoading} className="w-full bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-lg font-semibold transition-colors text-sm tracking-wide disabled:opacity-60">
+                  {forgotLoading ? 'Sending...' : 'Send Reset Link'}
+                </button>
+              </form>
+
+              <p className="text-stone-500 text-center mt-6 text-sm">
+                <span
+                  onClick={() => { setActiveTab('login'); setForgotMsg('') }}
+                  className="text-amber-500 cursor-pointer hover:underline font-semibold"
+                >
+                  Back to Login
+                </span>
+              </p>
+            </>
+          ) : (
+          <>
           {/* Tabs */}
           <div className="flex border-b border-stone-200 mb-6">
             <button
@@ -168,7 +236,7 @@ function Login() {
                   </div>
                 </div>
                 <div className="text-right mb-6">
-                  <span className="text-amber-500 text-sm cursor-pointer hover:underline">Forgot password?</span>
+                  <span onClick={() => setActiveTab('forgot')} className="text-amber-500 text-sm cursor-pointer hover:underline">Forgot password?</span>
                 </div>
                 <button type="submit" disabled={loading} className="w-full bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-lg font-semibold transition-colors text-sm tracking-wide disabled:opacity-60">
                   {loading ? 'Logging in...' : 'Login'}
@@ -224,6 +292,15 @@ function Login() {
             )}
           </form>
 
+          <div className="flex items-center gap-3 mt-6">
+            <div className="flex-1 h-px bg-stone-200" />
+            <span className="text-stone-400 text-xs">or</span>
+            <div className="flex-1 h-px bg-stone-200" />
+          </div>
+          <div className="mt-4 flex justify-center">
+            <GoogleLogin onSuccess={handleGoogleSuccess} onError={() => setError('Google sign-in failed. Please try again.')} />
+          </div>
+
           <p className="text-stone-500 text-center mt-6 text-sm">
             {activeTab === 'login' ? "Don't have an account? " : 'Already have an account? '}
             <span
@@ -233,6 +310,8 @@ function Login() {
               {activeTab === 'login' ? 'Register' : 'Login'}
             </span>
           </p>
+          </>
+          )}
         </div>
       </div>
 
