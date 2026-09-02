@@ -46,13 +46,13 @@ async function runInvestigation(address, investigationId, type, filePath) {
       formData.append('type', type);
       formData.append('file', blob, path.basename(filePath));
 
-      response = await fetch('http://localhost:8000/investigate-with-document', {
+      response = await fetch(`${process.env.AI_SERVICE_URL}/investigate-with-document`, {
         method: 'POST',
         body: formData,
         signal: AbortSignal.timeout(600000),
       });
     } else {
-      response = await fetch('http://localhost:8000/investigate', {
+      response = await fetch(`${process.env.AI_SERVICE_URL}/investigate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ address, type }),
@@ -207,7 +207,7 @@ router.post('/:id/chat', auth, validateObjectId, async (req, res) => {
     if (fraud_status) reportContext += `\n\nFRAUD CHECK:\n${fraud_status}`;
     if (document_status) reportContext += `\n\nDOCUMENT RISK:\n${document_status}`;
 
-    const response = await fetch('http://localhost:8000/report-qa', {
+    const response = await fetch(`${process.env.AI_SERVICE_URL}/report-qa`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -9,8 +9,10 @@ const { checkAllMonitoredProperties } = require('./watchdog');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+const allowedOrigins = [process.env.CLIENT_URL, 'http://localhost:5173'].filter(Boolean);
+
 app.use(express.json());
-app.use(require('cors')());
+app.use(require('cors')({ origin: allowedOrigins }));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/investigations', require('./routes/investigations'));
 app.use('/api/documents', require('./routes/documents'));

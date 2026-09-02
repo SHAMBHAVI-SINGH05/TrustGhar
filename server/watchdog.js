@@ -4,7 +4,7 @@ const Alert = require('./models/Alert');
 const SCORE_CHANGE_THRESHOLD = 5;
 
 async function checkInvestigation(investigation) {
-  const response = await fetch('http://localhost:8000/investigate', {
+  const response = await fetch(`${process.env.AI_SERVICE_URL}/investigate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ address: investigation.propertyAddress }),

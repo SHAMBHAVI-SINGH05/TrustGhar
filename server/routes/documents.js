@@ -21,7 +21,7 @@ async function runDocumentAnalysis(documentId, filePath, fileName) {
     const formData = new FormData();
     formData.append('file', blob, fileName);
 
-    const response = await fetch('http://localhost:8000/analyze-document', {
+    const response = await fetch(`${process.env.AI_SERVICE_URL}/analyze-document`, {
       method: 'POST',
       body: formData,
       signal: AbortSignal.timeout(300000),

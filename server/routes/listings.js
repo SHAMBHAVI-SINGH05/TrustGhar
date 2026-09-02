@@ -6,7 +6,7 @@ const validateObjectId = require('../middleware/validateObjectId');
 
 async function runListingCheck(listingCheckId, url) {
   try {
-    const response = await fetch('http://localhost:8000/check-listing', {
+    const response = await fetch(`${process.env.AI_SERVICE_URL}/check-listing`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url }),
