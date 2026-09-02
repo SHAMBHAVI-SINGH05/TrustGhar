@@ -16,12 +16,24 @@ const transporter = nodemailer.createTransport({
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
+function passwordScore(password) {
+  let score = 0;
+  if (password.length >= 8) score++;
+  if (/[0-9]/.test(password)) score++;
+  if (/[^A-Za-z0-9]/.test(password)) score++;
+  return score;
+}
+
 router.post('/register', async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'Name, email, and password are all required' });
+    }
+
+    if (passwordScore(password) < 3) {
+      return res.status(400).json({ message: 'Password is too weak — use 8+ characters with a number and a symbol' });
     }
 
     const existingUser = await User.findOne({ email });

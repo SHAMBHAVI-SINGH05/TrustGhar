@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { ShieldCheck, FileSearch, GitBranch, BarChart3, ArrowRight, Menu, X } from 'lucide-react'
+import api from '../api/axios'
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -20,11 +21,11 @@ const steps = [
   { step: '04', title: 'Report Generator', desc: 'Compiles everything into one trust score and report' },
 ]
 
-const stats = [
-  { value: 2400, prefix: '', suffix: '+', label: 'Properties analyzed' },
-  { value: 180, prefix: '₹', suffix: 'Cr', label: 'Fraud detected' },
-  { value: 94, prefix: '', suffix: '%', label: 'Accuracy rate' },
-  { value: 12, prefix: '', suffix: '', label: 'States covered' },
+const statLabels = [
+  { key: 'propertiesInvestigated', label: 'Properties investigated' },
+  { key: 'documentsAnalyzed', label: 'Documents analyzed' },
+  { key: 'listingsChecked', label: 'Listings checked' },
+  { key: 'propertiesMonitored', label: 'Properties monitored' },
 ]
 
 const navLinks = [
@@ -39,6 +40,7 @@ function Landing() {
   const navigate = useNavigate()
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [platformStats, setPlatformStats] = useState(null)
   const heroTextRef = useRef(null)
   const cardRef = useRef(null)
   const cardWrapRef = useRef(null)
@@ -74,20 +76,6 @@ function Landing() {
 
     gsap.to(marqueeRef.current, { xPercent: -50, repeat: -1, duration: 18, ease: 'none' })
 
-    statsRef.current.querySelectorAll('[data-counter]').forEach((el) => {
-      const target = Number(el.dataset.counter)
-      gsap.fromTo(el, { textContent: 0 }, {
-        textContent: target,
-        duration: 1.8,
-        ease: 'power1.out',
-        snap: { textContent: 1 },
-        onUpdate() {
-          el.textContent = Math.floor(el.textContent).toLocaleString('en-IN')
-        },
-        scrollTrigger: { trigger: el, start: 'top 90%' },
-      })
-    })
-
     gsap.utils.toArray('.reveal-card').forEach((card) => {
       gsap.fromTo(card, { opacity: 0, y: 40 }, {
         opacity: 1, y: 0, duration: 0.7, ease: 'power3.out',
@@ -101,6 +89,30 @@ function Landing() {
       wrap.removeEventListener('mouseleave', handleMouseLeave)
     }
   }, [])
+
+  useEffect(() => {
+    api.get('/dashboard/platform-stats')
+      .then((res) => setPlatformStats(res.data))
+      .catch((err) => console.error('Failed to load platform stats:', err))
+  }, [])
+
+  // Run the counting-up animation only once the real numbers have actually arrived.
+  useEffect(() => {
+    if (!platformStats) return
+    statsRef.current.querySelectorAll('[data-counter]').forEach((el) => {
+      const target = Number(el.dataset.counter)
+      gsap.fromTo(el, { textContent: 0 }, {
+        textContent: target,
+        duration: 1.8,
+        ease: 'power1.out',
+        snap: { textContent: 1 },
+        onUpdate() {
+          el.textContent = Math.floor(el.textContent).toLocaleString('en-IN')
+        },
+        scrollTrigger: { trigger: statsRef.current, start: 'top 90%' },
+      })
+    })
+  }, [platformStats])
 
   return (
     <div className="min-h-screen relative" style={{ background: 'linear-gradient(135deg, #1c1008 0%, #2d1a06 40%, #1a120a 100%)' }}>
@@ -222,10 +234,10 @@ function Landing() {
       {/* Stats bar */}
       <div ref={statsRef} className="max-w-5xl mx-auto px-8 my-20 relative z-10">
         <div className="rounded-2xl grid grid-cols-4 divide-x" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-          {stats.map((s, i) => (
+          {statLabels.map((s, i) => (
             <div key={i} className="p-6 text-center" style={i > 0 ? { borderColor: 'rgba(255,255,255,0.08)' } : {}}>
               <p className="text-white text-2xl font-extrabold">
-                {s.prefix}<span data-counter={s.value}>0</span>{s.suffix}
+                <span data-counter={platformStats?.[s.key] ?? 0}>0</span>
               </p>
               <p className="text-stone-500 text-xs mt-1">{s.label}</p>
             </div>

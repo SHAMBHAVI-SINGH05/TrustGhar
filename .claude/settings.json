@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"console.log\\(require\\('multer/package.json'\\).version\\)\")",
+      "Bash(node -e ' *)",
+      "Bash(tasklist //FI \"PID eq 34124\")",
+      "Bash(taskkill //PID 34124 //F)",
+      "Bash(findstr /C:\":5000 \" /C:\":5173 \")",
+      "Bash(tasklist //FI \"PID eq 41056\")",
+      "Bash(taskkill //PID 41056 //F)",
+      "Bash(taskkill //PID 34380 //F)",
+      "Bash(taskkill //PID 1692 //F)",
+      "Bash(curl -s -X POST http://localhost:5000/api/auth/register -H \"Content-Type: application/json\" -d '{}')",
+      "Bash(findstr /C:\":8000 \" /C:\":5173 \")",
+      "Bash(curl -s -X POST http://localhost:5000/api/auth/login -H \"Content-Type: application/json\" -d '{}')",
+      "Bash(curl -s -X POST http://localhost:5000/api/auth/register -H \"Content-Type: application/json\" -d '{\"email\":\"edgecase@test.com\"}')",
+      "Bash(curl -s -X POST http://localhost:5000/api/investigations -H \"Content-Type: application/json\" -d '{}')",
+      "Bash(curl -s http://localhost:5000/api/investigations/not-a-real-id -H \"Authorization: Bearer fake\")",
+      "Bash(curl -s -X POST http://localhost:5000/api/auth/register -H \"Content-Type: application/json\" -d '{\"name\":\"EdgeTest\",\"email\":\"edgecasetest999@test.com\",\"password\":\"testpass123\"}')",
+      "Bash(echo \"=== Investigations GET with invalid ObjectId format ===\")",
+      "Bash(curl -s http://localhost:5000/api/investigations/not-a-real-id -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2YTc2M2E5NTIzZmIxYjg3NTdlMDRlOTciLCJpYXQiOjE3ODYxMzMxNDEsImV4cCI6MTc4NjczNzk0MX0.PRdHaYQMBX4sqP9Ki5NqpaxwQ0x5Q6_tQa7kQuS3P3I')",
+      "Bash(echo \"\")",
+      "Bash(echo \"=== reset-password with a made-up/invalid token ===\")",
+      "Bash(curl -s -X POST http://localhost:5000/api/auth/reset-password/totallyfaketoken123 -H \"Content-Type: application/json\" -d '{\"password\":\"newpass123\"}')",
+      "Bash(curl -s -X POST http://localhost:5000/api/listings -H 'Content-Type: application/json' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2YTc2M2E5NTIzZmIxYjg3NTdlMDRlOTciLCJpYXQiOjE3ODYxMzMxNDEsImV4cCI6MTc4NjczNzk0MX0.PRdHaYQMBX4sqP9Ki5NqpaxwQ0x5Q6_tQa7kQuS3P3I' -d '{\"url\":\"https://this-is-not-a-real-website-xyz123.com/fake\"}' --max-time 30)",
+      "Bash(curl -s -X POST http://localhost:5000/api/listings/check -H 'Content-Type: application/json' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2YTc2M2E5NTIzZmIxYjg3NTdlMDRlOTciLCJpYXQiOjE3ODYxMzMxNDEsImV4cCI6MTc4NjczNzk0MX0.PRdHaYQMBX4sqP9Ki5NqpaxwQ0x5Q6_tQa7kQuS3P3I' -d '{\"url\":\"https://this-is-not-a-real-website-xyz123.com/fake\"}' --max-time 30)",
+      "Bash(echo \"=== Register with missing fields ===\")",
+      "Bash(curl -s -X POST http://localhost:5000/api/auth/register -H \"Content-Type: application/json\" -d '{\"email\":\"test2@test.com\"}')",
+      "Bash(echo \"=== Investigations GET with invalid ID ===\")",
+      "Bash(node \"C:\\\\Users\\\\ssham\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\e--TrustGhar\\\\2f91b6d6-506f-42ae-bbb5-aee522cae4ba\\\\scratchpad\\\\check_last_failed.js\")",
+      "Bash(node _debug_check.js)",
+      "PowerShell(Get-Process -Id 36416)",
+      "Bash(taskkill //PID 19212 //F)",
+      "Bash(findstr \":8000 \")",
+      "Bash(findstr \":5000 \")",
+      "Bash(findstr \":5173 \")",
+      "Bash(git commit -m ' *)",
+      "WebFetch(domain:console.groq.com)"
+    ]
+  }
+}

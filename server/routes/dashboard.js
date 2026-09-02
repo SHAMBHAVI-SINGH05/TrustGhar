@@ -26,7 +26,7 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-router.get('/platform-stats', auth, async (req, res) => {
+router.get('/platform-stats', async (req, res) => {
   try {
     const propertiesInvestigated = await Investigation.countDocuments({});
     const documentsAnalyzed = await Document.countDocuments({});

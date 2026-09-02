@@ -2,7 +2,7 @@ import re
 import json
 import fitz  # PyMuPDF
 from crewai import Agent, Task, Crew
-from tools import legal_search
+from tools import legal_search,web_open
 
 
 def extract_text_from_pdf(file_bytes: bytes) -> str:
@@ -36,7 +36,7 @@ def analyze_document(file_bytes: bytes, groq_llm) -> dict:
             "You always use the RERA Legal Search tool to find the exact law that applies "
             "to each clause you identify."
         ),
-        tools=[legal_search],
+        tools=[legal_search,web_open],
         llm=groq_llm,
     )
 

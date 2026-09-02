@@ -69,6 +69,12 @@ function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+
+    if (activeTab === 'register' && passwordStrength.score < 3) {
+      setError('Password is too weak — use 8+ characters with a number and a symbol')
+      return
+    }
+
     setLoading(true)
     try {
       const endpoint = activeTab === 'login' ? '/auth/login' : '/auth/register'

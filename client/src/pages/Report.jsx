@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ShieldCheck, Bell, LogOut, Download, Radio, ArrowLeft, CheckCircle, AlertTriangle, XCircle, GitBranch, Hourglass, MessageCircle, Send } from 'lucide-react'
+import { Download, Radio, ArrowLeft, CheckCircle, AlertTriangle, XCircle, GitBranch, Hourglass, MessageCircle, Send } from 'lucide-react'
 import { jsPDF } from 'jspdf'
 import api from '../api/axios'
 import FraudGraph from '../components/FraudGraph'
-import useUnreadAlerts from '../hooks/useUnreadAlerts'
+import Sidebar from '../components/Sidebar'
 
 const circumference = 2 * Math.PI * 54
 
@@ -59,33 +59,20 @@ function getFindings(inv) {
 }
 
 function getVerdict(score) {
-  if (score >= 75) return { label: 'Trustworthy', desc: 'Low risk — safe to proceed with standard due diligence', color: 'text-emerald-500' }
-  if (score >= 50) return { label: 'Moderate Risk', desc: 'Proceed with caution — verify key concerns before signing', color: 'text-amber-500' }
-  return { label: 'High Risk', desc: 'Significant red flags detected — seek legal advice before proceeding', color: 'text-red-500' }
+  if (score >= 75) return { label: 'Trustworthy', desc: 'Low risk — safe to proceed with standard due diligence', color: 'text-emerald-400' }
+  if (score >= 50) return { label: 'Moderate Risk', desc: 'Proceed with caution — verify key concerns before signing', color: 'text-amber-400' }
+  return { label: 'High Risk', desc: 'Significant red flags detected — seek legal advice before proceeding', color: 'text-red-400' }
 }
 
 function Report() {
   const navigate = useNavigate()
   const { id } = useParams()
-  const unreadAlerts = useUnreadAlerts()
   const [investigation, setInvestigation] = useState(null)
   const [loading, setLoading] = useState(true)
   const [monitoring, setMonitoring] = useState(false)
-  const [userName, setUserName] = useState('')
   const [chatMessages, setChatMessages] = useState([])
   const [chatInput, setChatInput] = useState('')
   const [chatSending, setChatSending] = useState(false)
-
-  useEffect(() => {
-    api.get('/auth/me')
-      .then((res) => setUserName(res.data.name))
-      .catch((err) => console.error('Failed to load user:', err))
-  }, [])
-
-  const handleLogout = () => {
-    localStorage.removeItem('token')
-    navigate('/login')
-  }
 
   useEffect(() => {
     api.get(`/investigations/${id}`)
@@ -204,7 +191,7 @@ function Report() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#f5ede0' }}>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #1c1008 0%, #2d1a06 40%, #1a120a 100%)' }}>
         <p className="text-stone-400 text-sm">Loading report...</p>
       </div>
     )
@@ -219,59 +206,24 @@ function Report() {
   const findings = getFindings(investigation)
 
   return (
-    <div className="min-h-screen" style={{ background: '#f5ede0' }}>
+    <div className="min-h-screen flex" style={{ background: 'linear-gradient(135deg, #1c1008 0%, #2d1a06 40%, #1a120a 100%)' }}>
 
-      {/* Navbar */}
-      <nav className="sticky top-0 z-50 bg-white border-b border-stone-200 px-8 py-3.5 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-8">
-          <div className="flex items-center gap-2.5">
-            <div className="bg-indigo-500 p-1.5 rounded-lg shadow-md shadow-indigo-200">
-              <ShieldCheck className="w-4 h-4 text-white" />
-            </div>
-            <span className="text-stone-900 font-extrabold text-base tracking-tight">TrustGhar</span>
-          </div>
-          <div className="flex items-center gap-1">
-            {[
-              { label: 'Dashboard', path: '/dashboard' },
-              { label: 'Investigations', path: '/dashboard' },
-              { label: 'Documents', path: '/documents' },
-              { label: 'Listings', path: '/listings' },
-              { label: 'Alerts', path: '/alerts' },
-              { label: 'Monitor', path: '/monitor' },
-            ].map((item, i) => (
-              <button key={i} onClick={() => navigate(item.path)} className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all
-                ${item.label === 'Investigations' ? 'bg-indigo-500 text-white shadow-sm' : 'text-stone-400 hover:text-stone-700 hover:bg-stone-100'}`}>
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/alerts')} className="relative p-2 rounded-xl hover:bg-stone-100 transition-colors">
-            <Bell className="w-4 h-4 text-stone-400" />
-            {unreadAlerts > 0 && <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-400 rounded-full" />}
-          </button>
-          <div className="flex items-center gap-2 bg-stone-100 rounded-full px-3 py-1.5">
-            <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold">S</div>
-            <span className="text-stone-700 text-sm font-medium">{userName}</span>
-          </div>
-          <button onClick={handleLogout} className="text-stone-400 hover:text-red-500 transition-colors p-1"><LogOut className="w-4 h-4" /></button>
-        </div>
-      </nav>
+      <Sidebar active="Investigations" />
 
-      <div className="max-w-5xl mx-auto px-8 py-10">
+      <div className="flex-1 min-w-0">
+        <div className="max-w-5xl mx-auto px-8 py-10">
 
-        <button onClick={() => navigate('/dashboard')} className="flex items-center gap-1.5 text-stone-400 hover:text-stone-700 text-sm font-medium mb-6 transition-colors">
+        <button onClick={() => navigate('/dashboard')} className="flex items-center gap-1.5 text-stone-400 hover:text-white text-sm font-medium mb-6 transition-colors">
           <ArrowLeft className="w-4 h-4" /> Back to Dashboard
         </button>
 
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-stone-900 text-2xl font-extrabold tracking-tight">Trust Report</h1>
+            <h1 className="text-white text-2xl font-extrabold tracking-tight">Trust Report</h1>
             <p className="text-stone-400 text-sm mt-1">{investigation?.propertyAddress}</p>
           </div>
           {isComplete && (
-            <button onClick={handleDownloadPdf} className="flex items-center gap-2 bg-white border border-stone-200 hover:border-indigo-300 text-stone-700 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-sm">
+            <button onClick={handleDownloadPdf} className="flex items-center gap-2 text-stone-200 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all hover:bg-white/5" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
               <Download className="w-4 h-4" />
               Download PDF
             </button>
@@ -279,9 +231,9 @@ function Report() {
         </div>
 
         {isFailed && (
-          <div className="bg-white rounded-2xl p-10 text-center shadow-sm border border-stone-100 mb-6">
+          <div className="rounded-2xl p-10 text-center mb-6" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
             <XCircle className="w-8 h-8 text-red-400 mx-auto mb-3" />
-            <p className="text-stone-700 text-sm font-semibold mb-1">Investigation Failed</p>
+            <p className="text-stone-200 text-sm font-semibold mb-1">Investigation Failed</p>
             <p className="text-stone-400 text-sm">
               {investigation?.error || 'Something went wrong while analyzing this property. Please try starting a new investigation.'}
             </p>
@@ -289,9 +241,9 @@ function Report() {
         )}
 
         {!isComplete && !isFailed && (
-          <div className="bg-white rounded-2xl p-10 text-center shadow-sm border border-stone-100 mb-6">
-            <Hourglass className="w-8 h-8 text-stone-300 mx-auto mb-3" />
-            <p className="text-stone-700 text-sm font-semibold mb-1">Still processing</p>
+          <div className="rounded-2xl p-10 text-center mb-6" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <Hourglass className="w-8 h-8 text-stone-500 mx-auto mb-3" />
+            <p className="text-stone-200 text-sm font-semibold mb-1">Still processing</p>
             <p className="text-stone-400 text-sm">
               AI agents are still analyzing this property. Come back in a few minutes.
             </p>
@@ -303,10 +255,10 @@ function Report() {
             <div className="grid grid-cols-3 gap-6 mb-6">
 
               {/* Score gauge */}
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-stone-100 flex flex-col items-center justify-center">
+              <div className="rounded-2xl p-6 flex flex-col items-center justify-center" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
                 <div className="relative w-32 h-32">
                   <svg className="w-32 h-32 -rotate-90">
-                    <circle cx="64" cy="64" r="54" fill="none" stroke="#f1efe9" strokeWidth="10" />
+                    <circle cx="64" cy="64" r="54" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="10" />
                     <circle
                       cx="64" cy="64" r="54" fill="none"
                       stroke={scoreColor} strokeWidth="10" strokeLinecap="round"
@@ -315,8 +267,8 @@ function Report() {
                     />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-3xl font-extrabold text-stone-900">{score}</span>
-                    <span className="text-stone-400 text-xs">/ 100</span>
+                    <span className="text-3xl font-extrabold text-white">{score}</span>
+                    <span className="text-stone-500 text-xs">/ 100</span>
                   </div>
                 </div>
                 <p className={`font-bold text-sm mt-4 ${verdict.color}`}>{verdict.label}</p>
@@ -324,17 +276,17 @@ function Report() {
               </div>
 
               {/* Sub-scores */}
-              <div className="col-span-2 bg-white rounded-2xl p-6 shadow-sm border border-stone-100">
-                <h2 className="text-stone-900 font-bold text-sm mb-5">Score Breakdown</h2>
+              <div className="col-span-2 rounded-2xl p-6" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <h2 className="text-white font-bold text-sm mb-5">Score Breakdown</h2>
                 <div className="flex flex-col gap-4">
                   {subScores.map((s, i) => (
                     <div key={i}>
                       <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-stone-600 text-sm font-medium">{s.label}</span>
-                        <span className="text-stone-800 text-sm font-bold">{s.value}</span>
+                        <span className="text-stone-300 text-sm font-medium">{s.label}</span>
+                        <span className="text-stone-200 text-sm font-bold">{s.value}</span>
                       </div>
-                      <div className="w-full h-2 rounded-full bg-stone-100 overflow-hidden">
-                        <div className="h-full rounded-full bg-indigo-500 transition-all" style={{ width: `${s.value}%` }} />
+                      <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
+                        <div className="h-full rounded-full bg-amber-500 transition-all" style={{ width: `${s.value}%` }} />
                       </div>
                     </div>
                   ))}
@@ -344,33 +296,33 @@ function Report() {
 
             {/* Key findings */}
             <div className="grid grid-cols-3 gap-6 mb-6 items-stretch">
-              <div className="col-span-2 bg-white rounded-2xl p-6 shadow-sm border border-stone-100">
-                <h2 className="text-stone-900 font-bold text-sm mb-5">Key Findings</h2>
+              <div className="col-span-2 rounded-2xl p-6" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <h2 className="text-white font-bold text-sm mb-5">Key Findings</h2>
                 <div className="flex flex-col gap-3">
                   {findings.length === 0 && (
                     <p className="text-stone-400 text-sm">No findings available.</p>
                   )}
                   {findings.map((f, i) => (
                     <div key={i} className={`flex items-start gap-3 p-3 rounded-xl border
-                      ${f.type === 'good' ? 'bg-emerald-50 border-emerald-100'
-                        : f.type === 'danger' ? 'bg-red-50 border-red-100'
-                        : 'bg-amber-50 border-amber-100'}`}>
+                      ${f.type === 'good' ? 'bg-emerald-500/10 border-emerald-500/25'
+                        : f.type === 'danger' ? 'bg-red-500/10 border-red-500/25'
+                        : 'bg-amber-500/10 border-amber-500/25'}`}>
                       {f.type === 'good'
-                        ? <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                        ? <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                         : f.type === 'danger'
-                        ? <XCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-                        : <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />}
-                      <p className="text-stone-700 text-sm leading-relaxed">{f.text}</p>
+                        ? <XCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                        : <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />}
+                      <p className="text-stone-200 text-sm leading-relaxed">{f.text}</p>
                     </div>
                   ))}
                 </div>
               </div>
 
               <div className="flex flex-col gap-5">
-                <div className="bg-white rounded-2xl p-5 shadow-sm border border-stone-100 flex-1 flex flex-col">
+                <div className="rounded-2xl p-5 flex-1 flex flex-col" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
                   <div className="flex items-center gap-2 mb-2">
-                    <GitBranch className="w-4 h-4 text-indigo-500" />
-                    <h3 className="text-stone-900 font-bold text-sm">Fraud Network Graph</h3>
+                    <GitBranch className="w-4 h-4 text-amber-400" />
+                    <h3 className="text-white font-bold text-sm">Fraud Network Graph</h3>
                   </div>
                   <p className="text-stone-400 text-xs mb-4 leading-relaxed">
                     Visualize builder connections and detect hidden ownership links.
@@ -378,7 +330,7 @@ function Report() {
                   {investigation.fraudGraph?.nodes?.length > 0 ? (
                     <FraudGraph graph={investigation.fraudGraph} />
                   ) : (
-                    <p className="text-stone-400 text-xs italic mt-auto">
+                    <p className="text-stone-500 text-xs italic mt-auto">
                       No additional builder network data found for this investigation.
                     </p>
                   )}
@@ -389,8 +341,8 @@ function Report() {
                   disabled={monitoring}
                   className={`flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all
                     ${monitoring
-                      ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 cursor-default'
-                      : 'bg-indigo-500 hover:bg-indigo-600 text-white shadow-lg shadow-indigo-200'}`}>
+                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 cursor-default'
+                      : 'bg-amber-500 hover:bg-amber-600 text-white shadow-lg shadow-amber-500/20'}`}>
                   <Radio className="w-4 h-4" />
                   {monitoring ? 'Monitoring Active' : 'Monitor This Property'}
                 </button>
@@ -399,19 +351,19 @@ function Report() {
 
             {/* Full AI report */}
             {investigation?.report && (
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-stone-100">
-                <h2 className="text-stone-900 font-bold text-sm mb-4">Full AI Investigation Report</h2>
-                <p className="text-stone-600 text-sm leading-relaxed whitespace-pre-wrap">
+              <div className="rounded-2xl p-6" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <h2 className="text-white font-bold text-sm mb-4">Full AI Investigation Report</h2>
+                <p className="text-stone-300 text-sm leading-relaxed whitespace-pre-wrap">
                   {investigation.report.replace(/^(TRUST_SCORE|RERA_SCORE|FRAUD_SCORE|DOCUMENT_SCORE|VERDICT):.*\n?/gm, '').replace(/^REPORT:\s*/i, '').trim()}
                 </p>
               </div>
             )}
 
             {/* Report Q&A chat */}
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-stone-100 mt-6">
+            <div className="rounded-2xl p-6 mt-6" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
               <div className="flex items-center gap-2 mb-4">
-                <MessageCircle className="w-4 h-4 text-indigo-500" />
-                <h2 className="text-stone-900 font-bold text-sm">Ask About This Report</h2>
+                <MessageCircle className="w-4 h-4 text-amber-400" />
+                <h2 className="text-white font-bold text-sm">Ask About This Report</h2>
               </div>
 
               <div className="flex flex-col gap-3 max-h-96 overflow-y-auto mb-4 pr-1">
@@ -424,15 +376,15 @@ function Report() {
                   <div key={m._id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <p className={`max-w-[75%] text-sm leading-relaxed px-4 py-2.5 rounded-2xl
                       ${m.role === 'user'
-                        ? 'bg-indigo-500 text-white rounded-br-sm'
-                        : 'bg-stone-100 text-stone-700 rounded-bl-sm'}`}>
+                        ? 'bg-amber-500 text-white rounded-br-sm'
+                        : 'bg-white/10 text-stone-200 rounded-bl-sm'}`}>
                       {m.text}
                     </p>
                   </div>
                 ))}
                 {chatSending && (
                   <div className="flex justify-start">
-                    <p className="max-w-[75%] text-sm px-4 py-2.5 rounded-2xl rounded-bl-sm bg-stone-100 text-stone-400 italic">
+                    <p className="max-w-[75%] text-sm px-4 py-2.5 rounded-2xl rounded-bl-sm bg-white/10 text-stone-400 italic">
                       Thinking...
                     </p>
                   </div>
@@ -446,18 +398,20 @@ function Report() {
                   onChange={(e) => setChatInput(e.target.value)}
                   placeholder="Ask a question about this report..."
                   disabled={chatSending}
-                  className="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-700 placeholder-stone-400 focus:outline-none focus:border-indigo-300 disabled:opacity-60"
+                  className="flex-1 rounded-xl px-4 py-2.5 text-sm text-stone-200 placeholder-stone-500 outline-none focus:border-amber-500/50 disabled:opacity-60"
+                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)' }}
                 />
                 <button
                   type="submit"
                   disabled={chatSending || !chatInput.trim()}
-                  className="bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2.5 rounded-xl transition-all shrink-0">
+                  className="bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2.5 rounded-xl transition-all shrink-0">
                   <Send className="w-4 h-4" />
                 </button>
               </form>
             </div>
           </>
         )}
+        </div>
       </div>
     </div>
   )

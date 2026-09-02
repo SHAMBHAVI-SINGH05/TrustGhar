@@ -7,13 +7,13 @@ from typing import TypedDict
 from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, LLM
 from langgraph.graph import StateGraph, START, END
-from tools import web_search, news_search, legal_search
+from tools import web_search, news_search, legal_search,web_open
 
 nest_asyncio.apply()
 load_dotenv()
 
 groq_llm = LLM(
-    model="llama-3.3-70b-versatile",
+    model="openai/gpt-oss-120b",
     provider="openai",
     api_key=os.getenv("GROQ_API_KEY"),
     base_url="https://api.groq.com/openai/v1",
@@ -44,8 +44,9 @@ rera_agent = Agent(
         "and builder track records from official portals and news sources. "
         "You also use the RERA Legal Search tool to cite the exact RERA Act provisions that apply."
     ),
-    tools=[web_search, news_search, legal_search],
+    tools=[web_search, news_search, legal_search,web_open],
     llm=groq_llm,
+    max_iter=7,
 )
 
 fraud_agent = Agent(
@@ -58,6 +59,7 @@ fraud_agent = Agent(
     ),
     tools=[web_search, news_search],
     llm=groq_llm,
+    max_iter=7,
 )
 
 document_agent = Agent(
@@ -68,8 +70,9 @@ document_agent = Agent(
         "and possession delay reports. You also use the RERA Legal Search tool to find the exact "
         "legal provision that applies — so buyers know their rights under the actual law."
     ),
-    tools=[web_search, news_search, legal_search],
+    tools=[web_search, news_search, legal_search,web_open],
     llm=groq_llm,
+    max_iter=7,
 )
 
 report_agent = Agent(
@@ -92,12 +95,42 @@ def _parse_score(label: str, text: str, default: int = 60) -> int:
 
 
 def _clean_agent_text(text: str) -> str:
-    # Groq's llama-3.3-70b sometimes writes out its tool-call attempt as
+    # Groq's models sometimes write out their tool-call attempt as
     # plain text (e.g. <function(web_search)>{"query": "..."}</function>)
     # instead of invoking the tool silently. Strip that leftover artifact
     # so it never reaches the UI or the PDF report.
     return re.sub(r'<function\([^)]*\)>.*?</function>', '', text, flags=re.DOTALL).strip()
 
+
+_RETRY_AFTER_PATTERN = re.compile(r'try again in ([\d.]+)\s*(s|m)', re.IGNORECASE)
+
+
+def _kickoff_with_retry(crew, max_retries: int = 3):
+    for attempt in range(max_retries + 1):
+        try:
+            return crew.kickoff()
+        except Exception as e:
+            message = str(e)
+            if 'Request too large' in message:
+                raise
+            if attempt >= max_retries:
+                raise
+            if 'tool_use_failed' in message.lower() or 'tool choice is none' in message.lower():
+                # gpt-oss-120b occasionally hallucinates a call to a tool that
+                # was never registered (e.g. "web_open") when asked to wrap up.
+                # Retrying restarts the task fresh, which usually samples a
+                # different — valid — response instead of repeating it.
+                print(f"[retry] model hallucinated an unregistered tool call — retrying (attempt {attempt + 1}/{max_retries})")
+                time.sleep(2)
+                continue
+            match = _RETRY_AFTER_PATTERN.search(message)
+            if match:
+                wait = min(float(match.group(1)) * (60 if match.group(2).lower() == 'm' else 1), 60)
+            elif 'rate_limit' in message.lower():
+                wait = 2 ** attempt  # exponential backoff: 1s, 2s, 4s
+            else:
+                raise  # not a rate-limit error at all — don't retry unrelated failures
+            time.sleep(wait + 1)
 
 def rera_node(state: InvestigationState):
     address = state["address"]
@@ -123,32 +156,28 @@ def rera_node(state: InvestigationState):
         ),
         agent=rera_agent,
     )
-    result = Crew(agents=[rera_agent], tasks=[task]).kickoff()
+    result = _kickoff_with_retry(Crew(agents=[rera_agent], tasks=[task]))
     return {"rera_status": _clean_agent_text(str(result))}
 
 
 def fraud_node(state: InvestigationState):
     time.sleep(15)
     address = state["address"]
+    rera_excerpt = state['rera_status'][:200]
     task = Task(
         description=(
             f"Investigate fraud and legal risks for this property: '{address}'.\n"
-            f"Context from RERA check: {state['rera_status']}\n\n"
+            f"Context from RERA check: {rera_excerpt}\n\n"
             f"Use web search and news search to find:\n"
             f"1. Builder name + 'fraud case India'\n"
             f"2. Builder name + 'FIR filed buyers cheated'\n"
             f"3. Builder name + 'court case possession delay'\n"
             f"4. Property name + 'scam complaint'\n"
             f"5. Builder name + 'insolvency NCLT'\n\n"
-            f"While searching, also note any real OWNERSHIP OR CORPORATE connections to the builder that "
-            f"come up: subsidiary or group companies, named directors/promoters, and other projects by the "
-            f"same builder mentioned in complaints or news. Only include an entity if you found an actual "
-            f"ownership, directorship, or 'also developed by the same builder' link in your search results — "
-            f"never connect two entities just because they share a name or are in the same area. Two "
-            f"companies both being located in the same neighborhood is NOT a connection worth graphing. "
-            f"If you found no genuine corporate connections beyond the builder itself, that's fine and "
-            f"expected — just include the builder as the only node with no edges. A graph with one node "
-            f"and no fraud is more honest and useful than a graph padded with irrelevant links.\n\n"
+            f"Also note any REAL ownership/corporate connections found (subsidiaries, group companies, "
+            f"directors/promoters, other projects by the same builder) — only if search results show an "
+            f"actual ownership/directorship/'also developed by' link, never just a shared name or area. "
+            f"If no genuine connections exist, list only the builder as a single node with no edges.\n\n"
             f"Report what you actually find:\n"
             f"- Any active fraud cases or FIRs\n"
             f"- Court orders against the builder\n"
@@ -170,7 +199,7 @@ def fraud_node(state: InvestigationState):
         ),
         agent=fraud_agent,
     )
-    result_text = _clean_agent_text(str(Crew(agents=[fraud_agent], tasks=[task]).kickoff()))
+    result_text = _clean_agent_text(str(_kickoff_with_retry(Crew(agents=[fraud_agent], tasks=[task]))))
 
     try:
         json_match = re.search(r'\{[\s\S]*\}', result_text)
@@ -236,7 +265,7 @@ def document_node(state: InvestigationState):
             agent=document_agent,
         )
 
-    result = Crew(agents=[document_agent], tasks=[task]).kickoff()
+    result = _kickoff_with_retry(Crew(agents=[document_agent], tasks=[task]))
     return {"document_status": _clean_agent_text(str(result))}
 
 
@@ -290,7 +319,7 @@ def report_node(state: InvestigationState):
         ),
         agent=report_agent,
     )
-    result = Crew(agents=[report_agent], tasks=[task]).kickoff()
+    result = _kickoff_with_retry(Crew(agents=[report_agent], tasks=[task]))
     result_text = _clean_agent_text(str(result))
 
     report_match = re.search(r'REPORT:\s*\n(.*)', result_text, re.DOTALL | re.IGNORECASE)

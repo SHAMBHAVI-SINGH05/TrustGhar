@@ -1,7 +1,7 @@
 import re
 import json
 from crewai import Agent, Task, Crew
-from tools import web_search, news_search
+from tools import web_search, news_search,web_open
 from listing_scraper import fetch_listing_text
 
 
@@ -29,7 +29,7 @@ def analyze_listing(url: str, groq_llm) -> dict:
             "be required. You use web search to check whether the seller name, phone number, or "
             "property has been reported as a scam anywhere online."
         ),
-        tools=[web_search, news_search],
+        tools=[web_search, news_search, web_open],
         llm=groq_llm,
     )
 

@@ -35,6 +35,9 @@ def read_root():
     return {"message": "TrustGhar AI service is running"}
 
 
+investigation_lock = threading.Lock()
+
+
 def stream_investigation(initial_state: dict) -> StreamingResponse:
     # The graph runs in its own thread and drops each finished agent's
     # output into this queue the moment it's ready, instead of only
@@ -42,11 +45,15 @@ def stream_investigation(initial_state: dict) -> StreamingResponse:
     updates_queue = queue.Queue()
 
     def run_graph():
-        try:
-            for update in investigation_graph.stream(initial_state, stream_mode="updates"):
-                updates_queue.put(update)
-        except Exception as e:
-            updates_queue.put({"error": str(e)})
+        # CrewAI's underlying executor isn't safe for two investigations
+        # running at once — this lock makes a second investigation wait
+        # its turn instead of crashing (and corrupting) the first one.
+        with investigation_lock:
+            try:
+                for update in investigation_graph.stream(initial_state, stream_mode="updates"):
+                    updates_queue.put(update)
+            except Exception as e:
+                updates_queue.put({"error": str(e)})
         updates_queue.put(None)  # signals the pipeline is fully done
 
     threading.Thread(target=run_graph, daemon=True).start()

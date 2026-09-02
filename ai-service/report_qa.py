@@ -1,6 +1,6 @@
 from crewai import Agent, Task, Crew
 from graph import groq_llm
-from tools import legal_search
+from tools import legal_search,web_open
 
 qa_agent = Agent(
     role="Property Report Q&A Assistant",
@@ -13,7 +13,7 @@ qa_agent = Agent(
         "isn't in the report and isn't a legal question, say plainly that it wasn't covered by this "
         "investigation."
     ),
-    tools=[legal_search],
+    tools=[legal_search,web_open],
     llm=groq_llm,
 )
 
